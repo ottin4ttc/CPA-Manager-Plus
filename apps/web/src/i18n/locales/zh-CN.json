@@ -3281,6 +3281,9 @@
       "upstream_error": "上游错误",
       "invalid_request": "无效请求",
       "auth": "鉴权失败",
+      "no_available_auth": "无可用账号",
+      "client_auth": "调用方 key 无效",
+      "model_unavailable": "模型不可用",
       "other": "其他"
     },
     "filter_model": "模型",

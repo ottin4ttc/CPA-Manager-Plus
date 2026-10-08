@@ -31,6 +31,9 @@ export const ERROR_CLASS_COLORS: Record<ErrorClass, string> = {
   upstream_error: '#c04949',
   invalid_request: '#5a9a5a',
   auth: '#b05f8a',
+  no_available_auth: '#a14d2a',
+  client_auth: '#2e7d8c',
+  model_unavailable: '#7d8f2e',
   other: '#6b7280',
 };
 
@@ -93,6 +96,7 @@ const UPSTREAM_CLASSES = new Set<ErrorClass>([
   'upstream_error',
   'stream_aborted',
   'timeout',
+  'no_available_auth',
 ]);
 
 function buildZeroFilledBuckets(fromMs: number, toMs: number): number[] {

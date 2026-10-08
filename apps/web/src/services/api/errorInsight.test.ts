@@ -109,7 +109,7 @@ describe('normalizeErrorInsightResponse', () => {
 });
 
 describe('ERROR_CLASSES', () => {
-  it('lists the ten protocol classes plus other', () => {
+  it('lists the thirteen protocol classes plus other', () => {
     expect(ERROR_CLASSES).toEqual([
       'upstream_overloaded',
       'rate_limited',
@@ -121,6 +121,9 @@ describe('ERROR_CLASSES', () => {
       'upstream_error',
       'invalid_request',
       'auth',
+      'no_available_auth',
+      'client_auth',
+      'model_unavailable',
       'other',
     ]);
   });

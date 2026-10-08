@@ -14,6 +14,9 @@ export const ERROR_CLASSES = [
   'upstream_error',
   'invalid_request',
   'auth',
+  'no_available_auth',
+  'client_auth',
+  'model_unavailable',
   'other',
 ] as const;
 

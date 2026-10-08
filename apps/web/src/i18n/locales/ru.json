@@ -3284,6 +3284,9 @@
       "upstream_error": "Ошибка апстрима",
       "invalid_request": "Неверный запрос",
       "auth": "Ошибка авторизации",
+      "no_available_auth": "Нет доступных аккаунтов",
+      "client_auth": "Неверный ключ клиента",
+      "model_unavailable": "Модель недоступна",
       "other": "Прочее"
     },
     "filter_model": "Модель",

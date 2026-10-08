@@ -3283,6 +3283,9 @@
       "upstream_error": "Upstream error",
       "invalid_request": "Invalid request",
       "auth": "Auth",
+      "no_available_auth": "No usable account",
+      "client_auth": "Invalid client key",
+      "model_unavailable": "Model unavailable",
       "other": "Other"
     },
     "filter_model": "Model",

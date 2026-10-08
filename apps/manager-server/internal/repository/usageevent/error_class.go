@@ -14,7 +14,17 @@ import (
 // avoided: rows written before the upstream fail-body fix carry response
 // headers appended after the JSON body, so LIKE is the only parser that
 // holds across the full history.
+//
+// The first three classes are rejections CPA decides before any upstream call
+// (CPA records them since 2026-10-08): no usable credential for the model
+// (auth selection error or model cooldown — their body may quote the last
+// upstream error, so they must outrank every upstream pattern), a missing or
+// invalid client API key, and a model the proxy cannot route or the client
+// key may not use.
 const errorClassExpression = `case
+	when fail_summary like '%auth_unavailable: %' or fail_summary like '%auth_not_found: %' or fail_summary like '%"code":"model_cooldown"%' then 'no_available_auth'
+	when fail_summary like '%"code":"invalid_credential"%' or fail_summary like '%"code":"no_credentials"%' then 'client_auth'
+	when fail_summary like '%unknown provider for model%' or fail_summary like '%is not available for this API key%' or fail_summary like '%is only supported on /v1/images/%' then 'model_unavailable'
 	when fail_summary like '%usage_limit_reached%' or fail_summary like '%usage limit has been reached%' then 'quota_exhausted'
 	when fail_summary like '%server_is_overloaded%' or fail_summary like '%service_unavailable%' or fail_status_code = 503 then 'upstream_overloaded'
 	when fail_summary like '%rpm_limit_exceeded%' or fail_summary like '%Rate limit exceeded%' or fail_status_code = 429 then 'rate_limited'

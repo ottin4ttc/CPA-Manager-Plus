@@ -3281,6 +3281,9 @@
       "upstream_error": "上游錯誤",
       "invalid_request": "無效請求",
       "auth": "鑑權失敗",
+      "no_available_auth": "無可用帳號",
+      "client_auth": "呼叫方 key 無效",
+      "model_unavailable": "模型不可用",
       "other": "其他"
     },
     "filter_model": "模型",

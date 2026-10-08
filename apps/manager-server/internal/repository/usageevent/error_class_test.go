@@ -254,6 +254,14 @@ func TestErrorClassStatsClassification(t *testing.T) {
 		{504, ``, "timeout"},
 		{500, `upstream connect error or disconnect/reset before headers. reset reason: connection timeout`, "network"},
 		{400, `{"error":{"message":"Your input exceeds the context window of this model."}}`, "invalid_request"},
+		// CPA 在调用上游之前就拒掉的请求（2026-10-08 起 CPA 也写使用记录）
+		{503, `auth_unavailable: no auth available (providers=openai-compatible-baidu, model=deepseek-v4-flash; last upstream error: invalid_model: The model does not exist or you do not have access to it.)`, "no_available_auth"},
+		{503, `auth_not_found: no auth available (providers=codex, model=gpt-5.6-sol; last upstream error: usage_limit_reached)`, "no_available_auth"},
+		{429, `{"error":{"code":"model_cooldown","message":"All credentials for model gpt-5.6-sol are cooling down","model":"gpt-5.6-sol","reset_seconds":30}}`, "no_available_auth"},
+		{401, `{"error":{"code":"invalid_credential","message":"Invalid API key","key":"bce-...94ea"}}`, "client_auth"},
+		{401, `{"error":{"code":"no_credentials","message":"Missing API key","key":""}}`, "client_auth"},
+		{400, `{"error":{"message":"unknown provider for model gpt-9","type":"invalid_request_error","code":"model_not_found","param":"model"}}`, "model_unavailable"},
+		{403, `model gpt-5.6-sol is not available for this API key`, "model_unavailable"},
 		{502, ``, "upstream_error"},
 		{200, `mystery failure body`, "other"},
 	}
