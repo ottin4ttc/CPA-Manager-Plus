@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { SelectOption } from '@/components/ui/Select';
 import {
+  buildBucketEditOptions,
+  collectObservedBucketNames,
   scopeBucketFilterToProvider,
   UNTAGGED_BUCKET_FILTER,
 } from '@/features/authFiles/bucketOptions';
-import { useAuthFilesBucketOptions } from '@/features/authFiles/hooks/useAuthFilesBucketOptions';
 import { useMonitoringAnalytics } from '@/features/monitoring/hooks/useMonitoringAnalytics';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
 import { buildApiKeyDisplayMap } from '@/features/monitoring/model/apiKeys';
@@ -160,7 +161,6 @@ export function useErrorInsight({ serviceBase, managementKey }: UseErrorInsightO
   }, [loadMonitoringMeta]);
 
   const authMetaMap = useMemo(() => buildMonitoringAuthMetaMap(authFiles), [authFiles]);
-  const bucketOptionNames = useAuthFilesBucketOptions(authFiles);
 
   const debouncedSearchQuery = useDebouncedValue(filters.searchQuery.trim(), SEARCH_DEBOUNCE_MS);
   const windowMs = useMemo(() => resolveWindowMs(filters.windowKey), [filters.windowKey]);
@@ -306,9 +306,12 @@ export function useErrorInsight({ serviceBase, managementKey }: UseErrorInsightO
         apiKeyDisplayMap
       ),
       authFiles: filterSelectorsData?.filter_options?.auth_files ?? [],
-      buckets: bucketOptionNames.map((name) => ({ value: name, label: name })),
+      buckets: buildBucketEditOptions(
+        collectObservedBucketNames(authFiles, filters.provider),
+        filters.bucket !== 'all' && filters.bucket !== UNTAGGED_BUCKET_FILTER ? [filters.bucket] : []
+      ).map((name) => ({ value: name, label: name })),
     }),
-    [filterSelectorsData, apiKeyDisplayMap, bucketOptionNames]
+    [filterSelectorsData, apiKeyDisplayMap, authFiles, filters.bucket, filters.provider]
   );
 
   return useMemo(

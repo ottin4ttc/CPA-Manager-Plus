@@ -839,7 +839,7 @@ const matchesStatusFilter = (
   return true;
 };
 
-// Compared case-sensitively because CPA resolves `codex-buckets` keys that way:
+// Compared case-sensitively because CPA resolves `buckets` keys that way:
 // a 'team-a' filter must not claim accounts tagged 'Team-A'.
 const matchesBucketFilter = (row: AccountRow, filter: string | undefined) => {
   if (!filter || filter === 'all') return true;

@@ -9,9 +9,14 @@ import {
 } from './bucketOptions';
 
 describe('parseConfiguredBucketNames', () => {
-  it('reads codex-buckets keys', () => {
-    const yaml = ['codex-buckets:', '  anon:', '    api-keys:', '      - sk-1', '  team:', '    api-keys: []'].join('\n');
+  it('reads buckets keys', () => {
+    const yaml = ['buckets:', '  anon:', '    api-keys:', '      - sk-1', '  team:', '    api-keys: []'].join('\n');
     expect(parseConfiguredBucketNames(yaml)).toEqual(['anon', 'team']);
+  });
+
+  it('ignores the old codex-buckets spelling', () => {
+    const yaml = ['codex-buckets:', '  anon:', '    api-keys:', '      - sk-1'].join('\n');
+    expect(parseConfiguredBucketNames(yaml)).toEqual([]);
   });
 
   it('returns empty when the block is absent', () => {
@@ -19,7 +24,7 @@ describe('parseConfiguredBucketNames', () => {
   });
 
   it('returns empty on malformed yaml instead of throwing', () => {
-    expect(parseConfiguredBucketNames('codex-buckets: [unclosed')).toEqual([]);
+    expect(parseConfiguredBucketNames('buckets: [unclosed')).toEqual([]);
   });
 });
 
@@ -34,6 +39,17 @@ describe('collectObservedBucketNames', () => {
         {},
       ])
     ).toEqual(['anon', 'team']);
+  });
+
+  it('only counts accounts of the given provider', () => {
+    const files = [
+      { type: 'codex', bucket: 'anon' },
+      { provider: 'codex', bucket: 'team' },
+      { type: 'claude', bucket: 'david' },
+      { type: 'Claude', bucket: 'shared' },
+    ];
+    expect(collectObservedBucketNames(files, 'claude')).toEqual(['david', 'shared']);
+    expect(collectObservedBucketNames(files, 'codex')).toEqual(['anon', 'team']);
   });
 });
 

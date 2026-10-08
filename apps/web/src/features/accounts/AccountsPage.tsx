@@ -3760,18 +3760,16 @@ export function AccountsPage() {
   );
   const providerOptions = useMemo(() => getProviderOptions(rows), [rows]);
   const planOptions = useMemo(() => getPlanOptions(rows), [rows]);
-  // Configured names plus anything already applied, so a hand-written tag stays
-  // selectable; the active filter is kept even if its last account disappears,
-  // otherwise the Select would render blank against a value with no option.
+  // Buckets present on the selected provider's accounts; the active filter is
+  // kept even if its last account disappears, otherwise the Select would render
+  // blank against a value with no option.
   const bucketFilterOptions = useMemo(
     () =>
-      buildBucketEditOptions(bucketOptions, [
-        ...collectObservedBucketNames(files),
-        ...(bucketFilter !== 'all' && bucketFilter !== UNTAGGED_BUCKET_FILTER
-          ? [bucketFilter]
-          : []),
-      ]),
-    [bucketFilter, bucketOptions, files]
+      buildBucketEditOptions(
+        collectObservedBucketNames(files, providerFilter),
+        bucketFilter !== 'all' && bucketFilter !== UNTAGGED_BUCKET_FILTER ? [bucketFilter] : []
+      ),
+    [bucketFilter, files, providerFilter]
   );
   // Buckets are codex/claude-only: leaving those tabs drops the tag so the hidden
   // filter never keeps narrowing another provider's list.

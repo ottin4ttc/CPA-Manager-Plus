@@ -98,6 +98,7 @@ import {
   formatUsageDurationMs,
 } from './usageAnalyticsPresentation';
 import {
+  buildBucketEditOptions,
   collectObservedBucketNames,
   providerSupportsBuckets,
   UNTAGGED_BUCKET_FILTER,
@@ -2594,13 +2595,18 @@ function UsageAnalyticsPageInner() {
   const bucketOptions = useMemo<SelectOption[]>(
     () => [
       { value: 'all', label: allBucketOptionLabel },
-      ...collectObservedBucketNames(usage.authFiles).map((bucket) => ({
+      ...buildBucketEditOptions(
+        collectObservedBucketNames(usage.authFiles, usage.filters.provider),
+        usage.filters.bucket !== 'all' && usage.filters.bucket !== UNTAGGED_BUCKET_FILTER
+          ? [usage.filters.bucket]
+          : []
+      ).map((bucket) => ({
         value: bucket,
         label: bucket,
       })),
       { value: UNTAGGED_BUCKET_FILTER, label: t('auth_files.bucket_filter_untagged') },
     ],
-    [allBucketOptionLabel, t, usage.authFiles]
+    [allBucketOptionLabel, t, usage.authFiles, usage.filters.bucket, usage.filters.provider]
   );
   const statusOptions: SelectOption[] = [
     { value: 'all', label: allStatusOptionLabel },

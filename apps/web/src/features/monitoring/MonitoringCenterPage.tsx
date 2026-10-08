@@ -815,8 +815,13 @@ export function MonitoringCenterPage() {
   );
 
   const bucketOptions = useMemo(
-    () => buildBucketOptionsFromValues(collectObservedBucketNames(authFiles), drilldownBucket, t),
-    [authFiles, drilldownBucket, t]
+    () =>
+      buildBucketOptionsFromValues(
+        collectObservedBucketNames(authFiles, selectedProvider),
+        drilldownBucket,
+        t
+      ),
+    [authFiles, drilldownBucket, selectedProvider, t]
   );
   // Buckets are codex/claude-only: the drilldown is hidden and reset the moment
   // the provider filter leaves them, so it can never keep narrowing another scope.
