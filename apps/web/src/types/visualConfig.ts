@@ -88,6 +88,11 @@ export type PluginStoreAuthRule = {
   allowInsecure: boolean;
 };
 
+export type BucketEntry = {
+  name: string;
+  apiKeys: string[];
+};
+
 export type VisualConfigValues = {
   host: string;
   port: string;
@@ -103,6 +108,9 @@ export type VisualConfigValues = {
   rmPanelRepo: string;
   authDir: string;
   apiKeysText: string;
+  buckets: BucketEntry[];
+  /** Read-only: `api-key-limits.exempt-buckets`, pruned on save when a listed bucket is deleted. */
+  apiKeyLimitsExemptBuckets: string[];
   pluginsEnabled: boolean;
   pluginsDir: string;
   pluginStoreSourcesText: string;
@@ -178,6 +186,8 @@ export const DEFAULT_VISUAL_VALUES: VisualConfigValues = {
   rmPanelRepo: '',
   authDir: '',
   apiKeysText: '',
+  buckets: [],
+  apiKeyLimitsExemptBuckets: [],
   pluginsEnabled: false,
   pluginsDir: '',
   pluginStoreSourcesText: '',

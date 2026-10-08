@@ -21,6 +21,12 @@ import {
   serializePayloadRulesForYaml,
   serializeRawPayloadRulesForYaml,
 } from './visualConfigPayloadRules';
+import {
+  areBucketsEqual,
+  parseBuckets,
+  parseExemptBuckets,
+  writeBucketsToDoc,
+} from './visualConfigBuckets';
 
 export {
   getPayloadParamValidationError,
@@ -517,6 +523,9 @@ function getNextDirtyFields(
   if (Object.prototype.hasOwnProperty.call(patch, 'apiKeysText')) {
     updateDirty('apiKeysText', nextValues.apiKeysText === baselineValues.apiKeysText);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'buckets')) {
+    updateDirty('buckets', areBucketsEqual(nextValues.buckets, baselineValues.buckets));
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'debug')) {
     updateDirty('debug', nextValues.debug === baselineValues.debug);
   }
@@ -775,6 +784,8 @@ export function useVisualConfig() {
 
         authDir: typeof parsed['auth-dir'] === 'string' ? parsed['auth-dir'] : '',
         apiKeysText: resolveApiKeysText(parsed),
+        buckets: parseBuckets(parsed.buckets),
+        apiKeyLimitsExemptBuckets: parseExemptBuckets(parsed['api-key-limits']),
         pluginsEnabled: Boolean(plugins?.enabled),
         pluginsDir: typeof plugins?.dir === 'string' ? plugins.dir : '',
         pluginStoreSourcesText: parseStringArrayText(
@@ -980,6 +991,7 @@ export function useVisualConfig() {
           }
           deleteLegacyApiKeysProvider(doc);
         }
+        if (isDirty('buckets')) writeBucketsToDoc(doc, values.buckets);
 
         if (isDirty('debug')) setBooleanInDoc(doc, ['debug'], values.debug);
 

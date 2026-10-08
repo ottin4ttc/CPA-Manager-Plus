@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Select';
 import {
   usageServiceApi,
   type ApiKeyAlias,
@@ -12,7 +13,13 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { maskApiKey } from '@/utils/format';
 import { sha256Hex } from '@/utils/apiKeyHash';
 import { isValidApiKeyCharset } from '@/utils/validation';
-import { makeClientId } from '@/types/visualConfig';
+import { makeClientId, type BucketEntry } from '@/types/visualConfig';
+import {
+  areBucketsEqual,
+  assignApiKeyToBucket,
+  findBucketForApiKey,
+  removeApiKeyFromBuckets,
+} from '@/hooks/visualConfigBuckets';
 import styles from './VisualConfigEditor.module.scss';
 
 type OrphanAliasConflict = {
@@ -22,12 +29,16 @@ type OrphanAliasConflict = {
 
 export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   value,
+  buckets,
   disabled,
   onChange,
+  onBucketsChange,
 }: {
   value: string;
+  buckets: BucketEntry[];
   disabled?: boolean;
   onChange: (nextValue: string) => void;
+  onBucketsChange: (nextBuckets: BucketEntry[]) => void;
 }) {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
@@ -56,12 +67,14 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
   const apiKeyHintId = `${apiKeyInputId}-hint`;
   const apiKeyErrorId = `${apiKeyInputId}-error`;
   const keyAliasInputId = `${apiKeyInputId}-alias`;
+  const keyBucketLabelId = `${apiKeyInputId}-bucket`;
   const aliasModalInputId = useId();
   const aliasModalErrorId = `${aliasModalInputId}-error`;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingApiKeyId, setEditingApiKeyId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [inputAliasValue, setInputAliasValue] = useState('');
+  const [inputBucketValue, setInputBucketValue] = useState('');
   const [formError, setFormError] = useState('');
   const [apiKeyAliases, setApiKeyAliases] = useState<ApiKeyAlias[]>([]);
   const [aliasesLoading, setAliasesLoading] = useState(false);
@@ -84,6 +97,14 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     });
     return map;
   }, [apiKeyAliases]);
+
+  const bucketSelectOptions = useMemo(
+    () => [
+      { value: '', label: t('config_management.visual.api_keys.bucket_none') },
+      ...buckets.map((bucket) => ({ value: bucket.name, label: bucket.name })),
+    ],
+    [buckets, t]
+  );
 
   const resolveAliasServiceBase = useCallback(
     async (): Promise<string> =>
@@ -314,6 +335,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     setEditingApiKeyId(null);
     setInputValue('');
     setInputAliasValue('');
+    setInputBucketValue('');
     setFormError('');
     setModalOpen(true);
   };
@@ -324,6 +346,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     setEditingApiKeyId(apiKeyId);
     setInputValue(editingKey);
     setInputAliasValue(getAliasForApiKey(editingKey));
+    setInputBucketValue(findBucketForApiKey(buckets, editingKey));
     setFormError('');
     setModalOpen(true);
   };
@@ -332,6 +355,7 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     setModalOpen(false);
     setInputValue('');
     setInputAliasValue('');
+    setInputBucketValue('');
     setEditingApiKeyId(null);
     setFormError('');
   };
@@ -356,11 +380,18 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
     onChange(nextKeys.join('\n'));
   };
 
+  const updateBuckets = (nextBuckets: BucketEntry[]) => {
+    if (!areBucketsEqual(nextBuckets, buckets)) onBucketsChange(nextBuckets);
+  };
+
   const handleDelete = (apiKeyId: string) => {
     const index = renderApiKeyIds.findIndex((id) => id === apiKeyId);
     if (index < 0) return;
+    const removedKey = apiKeys[index];
+    const nextKeys = apiKeys.filter((_, i) => i !== index);
     setApiKeyIds(renderApiKeyIds.filter((id) => id !== apiKeyId));
-    updateApiKeys(apiKeys.filter((_, i) => i !== index));
+    updateApiKeys(nextKeys);
+    if (!nextKeys.includes(removedKey)) updateBuckets(removeApiKeyFromBuckets(buckets, removedKey));
   };
 
   const handleSave = async () => {
@@ -426,6 +457,13 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
       setApiKeyIds([...renderApiKeyIds, makeClientId()]);
     }
     updateApiKeys(nextKeys);
+    // Bucket membership follows the key: a renamed key leaves its old entry behind otherwise.
+    const previousKey = editingIndex >= 0 ? apiKeys[editingIndex] : '';
+    let nextBuckets = assignApiKeyToBucket(buckets, trimmed, inputBucketValue);
+    if (previousKey && previousKey !== trimmed && !nextKeys.includes(previousKey)) {
+      nextBuckets = removeApiKeyFromBuckets(nextBuckets, previousKey);
+    }
+    updateBuckets(nextBuckets);
     closeModal();
   };
 
@@ -525,11 +563,17 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
           {apiKeys.map((key, index) => {
             const apiKeyHash = getApiKeyHash(key);
             const alias = apiKeyHash ? (aliasByHash.get(apiKeyHash)?.alias ?? '') : '';
+            const bucket = findBucketForApiKey(buckets, key);
             return (
               <div key={renderApiKeyIds[index] ?? `${key}-${index}`} className="item-row">
                 <div className="item-meta">
                   <div className="item-title">
                     {alias || t('config_management.visual.api_keys.input_label')}
+                    {bucket ? (
+                      <span className="pill" style={{ marginLeft: 8 }}>
+                        {t('config_management.visual.api_keys.bucket_badge', { name: bucket })}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="item-subtitle">{maskApiKey(String(key || ''))}</div>
                 </div>
@@ -642,6 +686,22 @@ export const ApiKeysCardEditor = memo(function ApiKeysCardEditor({
             />
             <div className="hint">{t('config_management.visual.api_keys.alias_hint')}</div>
           </div>
+          {buckets.length > 0 ? (
+            <div className="form-group">
+              <label id={keyBucketLabelId}>
+                {t('config_management.visual.api_keys.bucket_label')}
+              </label>
+              <Select
+                value={inputBucketValue}
+                options={bucketSelectOptions}
+                onChange={setInputBucketValue}
+                disabled={disabled}
+                ariaLabelledBy={keyBucketLabelId}
+                fullWidth
+              />
+              <div className="hint">{t('config_management.visual.api_keys.bucket_hint')}</div>
+            </div>
+          ) : null}
           {formError && (
             <div id={apiKeyErrorId} className="error-box">
               {formError}

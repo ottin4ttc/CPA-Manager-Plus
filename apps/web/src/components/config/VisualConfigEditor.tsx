@@ -30,6 +30,7 @@ import {
 import { ConfigSection } from '@/components/config/ConfigSection';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import type {
+  BucketEntry,
   PayloadFilterRule,
   PayloadParamValidationErrorCode,
   PayloadRule,
@@ -40,6 +41,7 @@ import type {
 } from '@/types/visualConfig';
 import {
   ApiKeysCardEditor,
+  BucketsCardEditor,
   PayloadFilterRulesEditor,
   PayloadRulesEditor,
   PluginStoreAuthEditor,
@@ -244,6 +246,10 @@ export function VisualConfigEditor({
 
   const handleApiKeysTextChange = useCallback(
     (apiKeysText: string) => onChange({ apiKeysText }),
+    [onChange]
+  );
+  const handleBucketsChange = useCallback(
+    (buckets: BucketEntry[]) => onChange({ buckets }),
     [onChange]
   );
   const handlePayloadDefaultRulesChange = useCallback(
@@ -771,8 +777,18 @@ export function VisualConfigEditor({
               <div className={styles.subsection}>
                 <ApiKeysCardEditor
                   value={values.apiKeysText}
+                  buckets={values.buckets}
                   disabled={disabled}
                   onChange={handleApiKeysTextChange}
+                  onBucketsChange={handleBucketsChange}
+                />
+              </div>
+              <div className={styles.subsection}>
+                <BucketsCardEditor
+                  value={values.buckets}
+                  exemptBuckets={values.apiKeyLimitsExemptBuckets}
+                  disabled={disabled}
+                  onChange={handleBucketsChange}
                 />
               </div>
             </SectionStack>

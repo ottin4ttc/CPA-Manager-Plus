@@ -3719,7 +3719,28 @@
         "alias_error_too_long": "别名不能超过 120 个字符",
         "alias_error_duplicate": "别名已存在，请换一个唯一别名",
         "error_empty": "请输入 API 密钥",
-        "error_invalid": "API 密钥包含无效字符"
+        "error_invalid": "API 密钥包含无效字符",
+        "bucket_label": "分桶",
+        "bucket_none": "未分桶",
+        "bucket_hint": "分到某个桶的密钥只使用打了同名标签的 Codex/Claude 账号；未分桶的密钥只使用未打标签的账号。",
+        "bucket_badge": "分桶：{{name}}"
+      },
+      "buckets": {
+        "label": "分桶 (buckets)",
+        "add": "新建分桶",
+        "empty": "暂无分桶",
+        "hint": "分桶让一组 API 密钥独占一批 Codex/Claude 账号。在上方新增或编辑密钥时选择分桶，在账号详情里给账号打上分桶标签。",
+        "key_count": "API 密钥：{{count}} 个",
+        "add_title": "新建分桶",
+        "name_label": "分桶名称",
+        "name_placeholder": "例如 team-a",
+        "name_hint": "区分大小写。账号的认证文件里记录的是分桶名称，因此建好后不能改名。",
+        "error_empty": "请输入分桶名称",
+        "error_duplicate": "该分桶已存在",
+        "error_reserved": "\"default\" 在 bucket-model-routes 中表示未分桶的密钥，不能用作分桶名称",
+        "delete_title": "删除分桶",
+        "delete_confirm": "确定删除分桶 {{name}}？其中的 API 密钥会变为未分桶；打了 {{name}} 标签的账号在重新打标签前不会被任何密钥使用。",
+        "delete_exempt": "{{name}} 也会从 api-key-limits.exempt-buckets 中移除，其中的密钥将改用默认限流。"
       },
       "payload_rules": {
         "rule": "规则",

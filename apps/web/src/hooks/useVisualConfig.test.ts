@@ -397,6 +397,51 @@ describe('useVisualConfig', () => {
     harness.unmount();
   });
 
+  it('loads buckets and writes them back only after a bucket edit', () => {
+    const harness = mountUseVisualConfig();
+    const yaml = [
+      'api-keys: [sk-a, sk-b]',
+      'buckets:',
+      '  team-a:',
+      '    api-keys: [sk-a]',
+      'api-key-limits:',
+      '  exempt-buckets: [team-a]',
+      '',
+    ].join('\n');
+
+    act(() => {
+      expect(harness.getCurrent().loadVisualValuesFromYaml(yaml).ok).toBe(true);
+    });
+    expect(harness.getCurrent().visualValues.buckets).toEqual([
+      { name: 'team-a', apiKeys: ['sk-a'] },
+    ]);
+    expect(harness.getCurrent().visualValues.apiKeyLimitsExemptBuckets).toEqual(['team-a']);
+
+    act(() => {
+      harness.getCurrent().setVisualValues({ buckets: [{ name: 'team-a', apiKeys: ['sk-a'] }] });
+    });
+    expect(harness.getCurrent().visualDirty).toBe(false);
+
+    act(() => {
+      harness.getCurrent().setVisualValues({
+        buckets: [
+          { name: 'team-a', apiKeys: [] },
+          { name: 'team-b', apiKeys: ['sk-a'] },
+        ],
+      });
+    });
+    expect(harness.getCurrent().visualDirty).toBe(true);
+    expect(parseYaml(harness.getCurrent().applyVisualChangesToYaml(yaml))).toEqual({
+      'api-keys': ['sk-a', 'sk-b'],
+      buckets: {
+        'team-a': { 'api-keys': [] },
+        'team-b': { 'api-keys': ['sk-a'] },
+      },
+      'api-key-limits': { 'exempt-buckets': ['team-a'] },
+    });
+    harness.unmount();
+  });
+
   it('uses CPA defaults for absent quota and WebSocket auth fields', () => {
     const harness = mountUseVisualConfig();
     const yaml = ['host: 127.0.0.1', ''].join('\n');

@@ -3721,7 +3721,28 @@
         "alias_error_too_long": "Alias must be 120 characters or less",
         "alias_error_duplicate": "Alias already exists. Use a unique alias.",
         "error_empty": "Please enter an API key",
-        "error_invalid": "API key contains invalid characters"
+        "error_invalid": "API key contains invalid characters",
+        "bucket_label": "Bucket",
+        "bucket_none": "Unbucketed",
+        "bucket_hint": "A key in a bucket only uses Codex/Claude accounts tagged with that bucket; an unbucketed key only uses untagged accounts.",
+        "bucket_badge": "Bucket: {{name}}"
+      },
+      "buckets": {
+        "label": "Buckets (buckets)",
+        "add": "New Bucket",
+        "empty": "No buckets",
+        "hint": "A bucket gives a group of API keys its own pool of Codex/Claude accounts. Assign a key to a bucket when adding or editing it above, and tag accounts with the bucket in the account details.",
+        "key_count": "API keys: {{count}}",
+        "add_title": "New Bucket",
+        "name_label": "Bucket Name",
+        "name_placeholder": "e.g. team-a",
+        "name_hint": "Case-sensitive. A bucket cannot be renamed later because account auth files store its name.",
+        "error_empty": "Please enter a bucket name",
+        "error_duplicate": "This bucket already exists",
+        "error_reserved": "\"default\" is reserved for unbucketed keys in bucket-model-routes",
+        "delete_title": "Delete Bucket",
+        "delete_confirm": "Delete bucket {{name}}? Its API keys become unbucketed, and accounts tagged {{name}} will not be used by any API key until they are re-tagged.",
+        "delete_exempt": "{{name}} is also removed from api-key-limits.exempt-buckets, so its keys fall back to the default rate limit."
       },
       "payload_rules": {
         "rule": "Rule",

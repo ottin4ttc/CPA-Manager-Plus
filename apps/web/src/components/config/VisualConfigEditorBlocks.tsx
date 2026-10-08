@@ -30,6 +30,7 @@ import {
 } from '@/hooks/useVisualConfig';
 
 export { ApiKeysCardEditor } from './ApiKeysCardEditor';
+export { BucketsCardEditor } from './BucketsCardEditor';
 
 /** Minimum character count before the expand/collapse toggle appears. */
 const EXPAND_THRESHOLD = 30;
