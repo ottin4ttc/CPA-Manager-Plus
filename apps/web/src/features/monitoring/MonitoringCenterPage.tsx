@@ -818,8 +818,8 @@ export function MonitoringCenterPage() {
     () => buildBucketOptionsFromValues(collectObservedBucketNames(authFiles), drilldownBucket, t),
     [authFiles, drilldownBucket, t]
   );
-  // Buckets are codex-only: the drilldown is hidden and reset the moment the
-  // provider filter leaves codex, so it can never keep narrowing another scope.
+  // Buckets are codex/claude-only: the drilldown is hidden and reset the moment
+  // the provider filter leaves them, so it can never keep narrowing another scope.
   const showBucketFilter = providerSupportsBuckets(selectedProvider);
   // auth_file / auth_index / project_id arrive only through drilldown links and
   // have no control of their own. Once the operator picks a different "who"

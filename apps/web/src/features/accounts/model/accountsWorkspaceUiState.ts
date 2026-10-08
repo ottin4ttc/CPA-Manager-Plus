@@ -15,7 +15,7 @@ export interface AccountsWorkspaceUiState {
   statusFilter: AccountStatusFilter;
   planFilter: string;
   quotaBandFilter: AccountQuotaBand;
-  /** 'all', a configured codex bucket name, or UNTAGGED_BUCKET_FILTER. */
+  /** 'all', a configured bucket name, or UNTAGGED_BUCKET_FILTER. */
   bucketFilter: string;
   operationalFilter: AccountOperationalFilter;
   accountSort: AccountRowSort;

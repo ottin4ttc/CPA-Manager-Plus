@@ -180,10 +180,13 @@ describe('errorInsightUiState', () => {
     expect(state.selectedClass).toBe('auth');
   });
 
-  it('keeps a bucket filter only while the provider filter is codex', () => {
+  it('keeps a bucket filter only while the provider filter is codex or claude', () => {
     const base = getDefaultErrorInsightFilters();
     expect(
       normalizeErrorInsightFilters({ ...base, provider: 'codex', bucket: 'bucket-1' }).bucket
+    ).toBe('bucket-1');
+    expect(
+      normalizeErrorInsightFilters({ ...base, provider: 'claude', bucket: 'bucket-1' }).bucket
     ).toBe('bucket-1');
     expect(
       normalizeErrorInsightFilters({ ...base, provider: 'all', bucket: 'bucket-1' }).bucket
@@ -193,7 +196,7 @@ describe('errorInsightUiState', () => {
     ).toBe('all');
   });
 
-  it('ignores a bucket query param unless the query scopes to codex', () => {
+  it('ignores a bucket query param unless the query scopes to a bucket provider', () => {
     const fallback = getDefaultErrorInsightFilters();
     expect(
       buildErrorInsightUiStateFromSearchParams(new URLSearchParams('bucket=bucket-1'), fallback)
@@ -207,7 +210,7 @@ describe('errorInsightUiState', () => {
     ).toBe('bucket-1');
   });
 
-  it('leaves the bucket out of the URL for a non-codex provider', () => {
+  it('leaves the bucket out of the URL for a provider without buckets', () => {
     const params = buildErrorInsightSearchParams({
       ...getDefaultErrorInsightFilters(),
       provider: 'openai',

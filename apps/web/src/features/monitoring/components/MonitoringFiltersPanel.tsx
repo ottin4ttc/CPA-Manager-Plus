@@ -27,7 +27,7 @@ type MonitoringFiltersPanelProps = {
   combinedError: string | null;
   usageStatisticsEnabled: boolean;
   overallLoading: boolean;
-  /** Buckets are codex-only; the page passes false whenever the provider filter is not codex. */
+  /** Buckets are codex/claude-only; the page passes false whenever the provider filter is neither. */
   showBucketFilter: boolean;
   t: TFunction;
   onTimeRangeChange: (value: MonitoringTimeRange) => void;

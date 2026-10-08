@@ -8,7 +8,7 @@ import {
 } from '@/features/authFiles/bucketOptions';
 
 /**
- * Bucket names available for tagging Codex accounts in the auth-files editor:
+ * Bucket names available for tagging Codex/Claude accounts in the auth-files editor:
  * names declared in CPA's config.yaml (fetched once) plus any bucket already
  * applied to an account (recomputed whenever the auth-files list changes).
  */

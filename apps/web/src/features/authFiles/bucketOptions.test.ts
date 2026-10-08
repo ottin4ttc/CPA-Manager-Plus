@@ -50,9 +50,11 @@ describe('UNTAGGED_BUCKET_FILTER', () => {
 });
 
 describe('providerSupportsBuckets', () => {
-  it('is true only for codex, regardless of case', () => {
+  it('is true only for codex and claude, regardless of case', () => {
     expect(providerSupportsBuckets('codex')).toBe(true);
     expect(providerSupportsBuckets('Codex')).toBe(true);
+    expect(providerSupportsBuckets('claude')).toBe(true);
+    expect(providerSupportsBuckets('Claude')).toBe(true);
     expect(providerSupportsBuckets('all')).toBe(false);
     expect(providerSupportsBuckets('gemini')).toBe(false);
     expect(providerSupportsBuckets('')).toBe(false);
@@ -60,9 +62,11 @@ describe('providerSupportsBuckets', () => {
 });
 
 describe('scopeBucketFilterToProvider', () => {
-  it('keeps the bucket when the provider is codex', () => {
+  it('keeps the bucket when the provider is codex or claude', () => {
     const filters = { provider: 'codex', bucket: 'team-a', model: 'gpt-5' };
     expect(scopeBucketFilterToProvider(filters)).toBe(filters);
+    const claudeFilters = { provider: 'claude', bucket: 'team-a', model: 'claude-opus-4-7' };
+    expect(scopeBucketFilterToProvider(claudeFilters)).toBe(claudeFilters);
   });
 
   it('resets the bucket to all for any other provider', () => {

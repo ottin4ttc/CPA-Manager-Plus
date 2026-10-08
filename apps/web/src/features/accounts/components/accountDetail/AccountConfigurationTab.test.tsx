@@ -170,7 +170,7 @@ describe('AccountConfigurationTab', () => {
     expect(text).not.toContain('ai_providers.claude_cloak_mode_label');
   });
 
-  it('offers the bucket tag only on codex accounts, with the configured vocabulary', () => {
+  it('offers the bucket tag only on codex and claude accounts, with the configured vocabulary', () => {
     const codex = renderTab(
       makeRow('codex'),
       makeEditor('codex', makeDraft({ bucket: 'team-a' })),
@@ -189,6 +189,11 @@ describe('AccountConfigurationTab', () => {
     ]);
     expect(
       renderTab(makeRow('claude'), makeEditor('claude'))
+        .root.findAllByType(Select)
+        .some((select) => select.props.ariaLabel === 'auth_files.bucket_display')
+    ).toBe(true);
+    expect(
+      renderTab(makeRow('xai'), makeEditor('xai'))
         .root.findAllByType(Select)
         .some((select) => select.props.ariaLabel === 'auth_files.bucket_display')
     ).toBe(false);

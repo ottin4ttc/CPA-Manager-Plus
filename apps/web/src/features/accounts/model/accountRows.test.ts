@@ -2893,7 +2893,7 @@ describe('accountRows', () => {
   });
 });
 
-describe('codex bucket rows and filtering', () => {
+describe('bucket rows and filtering', () => {
   const bucketBaseFilters = {
     provider: 'all',
     status: 'all' as const,

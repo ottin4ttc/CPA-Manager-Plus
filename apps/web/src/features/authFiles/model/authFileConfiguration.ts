@@ -6,6 +6,7 @@ import {
   type CoolingPolicy,
 } from '@/types';
 import type { AuthFileFieldsPatch } from '@/services/api/authFiles';
+import { providerSupportsBuckets } from '@/features/authFiles/bucketOptions';
 import {
   normalizeExcludedModels,
   normalizeProviderKey,
@@ -66,7 +67,7 @@ export type AuthFileConfigurationCapabilities = {
   websockets: boolean;
   xaiRouting: boolean;
   claudeCloak: boolean;
-  codexBucket: boolean;
+  bucket: boolean;
 };
 
 export type ParsedAuthFileConfigurationSource = {
@@ -275,7 +276,7 @@ export const getAuthFileConfigurationCapabilities = (
     websockets: providerKey === 'codex' || providerKey === 'xai',
     xaiRouting: providerKey === 'xai',
     claudeCloak: providerKey === 'claude',
-    codexBucket: providerKey === 'codex',
+    bucket: providerSupportsBuckets(providerKey),
   };
 };
 

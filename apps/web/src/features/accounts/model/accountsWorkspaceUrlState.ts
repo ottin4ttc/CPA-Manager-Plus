@@ -108,7 +108,7 @@ export const readAccountsWorkspaceUrlState = (
     planFilter: readNonEmpty(params, 'plan', fallback.planFilter),
     quotaBandFilter: readEnum(params, 'quota', QUOTA_BAND_SET, fallback.quotaBandFilter),
     // Free-form rather than enum-backed: bucket names come from CPA's config.yaml.
-    // Buckets are codex-only, so the tag is dropped whenever the workspace
+    // Buckets are codex/claude-only, so the tag is dropped whenever the workspace
     // lands on any other provider tab.
     bucketFilter: providerSupportsBuckets(providerFilter)
       ? readNonEmpty(params, 'bucket', fallback.bucketFilter)

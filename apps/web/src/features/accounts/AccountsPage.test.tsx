@@ -3551,7 +3551,7 @@ describe('AccountsPage replacement flows', () => {
     ).toHaveLength(1);
   });
 
-  it('filters accounts by codex bucket, including the untagged reservation', async () => {
+  it('filters accounts by bucket, including the untagged reservation', async () => {
     mocks.files = [
       { ...makeCodexFile('a.json', 'auth-a', 'a@example.com'), bucket: 'team-a' } as AuthFileItem,
       { ...makeCodexFile('b.json', 'auth-b', 'b@example.com'), bucket: 'team-b' } as AuthFileItem,

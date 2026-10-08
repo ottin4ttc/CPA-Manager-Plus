@@ -175,7 +175,7 @@ describe('accountsWorkspaceUrlState', () => {
   });
 });
 
-describe('accountsWorkspaceUrlState codex bucket filter', () => {
+describe('accountsWorkspaceUrlState bucket filter', () => {
   it('round-trips a bucket filter and keeps the default out of the URL', () => {
     const search = writeAccountsWorkspaceUrlSearch(
       '',
@@ -223,7 +223,16 @@ describe('accountsWorkspaceUrlState codex bucket filter', () => {
     ).toBe('__untagged__');
   });
 
-  it('ignores a bucket param unless the URL scopes the workspace to codex', () => {
+  it('keeps a bucket param when the URL scopes the workspace to claude', () => {
+    expect(
+      readAccountsWorkspaceUrlState(
+        '?provider=claude&bucket=team-a',
+        DEFAULT_ACCOUNTS_WORKSPACE_UI_STATE
+      ).bucketFilter
+    ).toBe('team-a');
+  });
+
+  it('ignores a bucket param unless the URL scopes the workspace to a bucket provider', () => {
     expect(
       readAccountsWorkspaceUrlState('?bucket=team-a', DEFAULT_ACCOUNTS_WORKSPACE_UI_STATE)
         .bucketFilter

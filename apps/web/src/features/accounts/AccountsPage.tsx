@@ -3773,7 +3773,7 @@ export function AccountsPage() {
       ]),
     [bucketFilter, bucketOptions, files]
   );
-  // Buckets are codex-only: leaving the codex tab drops the tag so the hidden
+  // Buckets are codex/claude-only: leaving those tabs drops the tag so the hidden
   // filter never keeps narrowing another provider's list.
   const handleProviderFilterChange = useCallback((value: string) => {
     setProviderFilter(value);

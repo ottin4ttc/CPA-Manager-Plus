@@ -230,7 +230,7 @@ export function AccountConfigurationTab({
             disabled={disabled}
             onChange={(event) => editor.updateField('weight', event.target.value)}
           />
-          {capabilities.codexBucket ? (
+          {capabilities.bucket ? (
             <div>
               <div className={styles.configurationFieldLabel}>
                 {t('auth_files.bucket_display')}

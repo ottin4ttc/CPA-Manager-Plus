@@ -4,12 +4,17 @@ import { normalizeProviderKey } from '@/features/authFiles/constants';
 /** Reserved filter value selecting accounts that carry no bucket tag. */
 export const UNTAGGED_BUCKET_FILTER = '__untagged__';
 
-/** Buckets are a Codex-only routing concept (`codex-buckets` in config.yaml). */
-export const providerSupportsBuckets = (provider: string): boolean =>
-  normalizeProviderKey(provider) === 'codex';
+const BUCKET_PROVIDERS = new Set(['codex', 'claude']);
 
 /**
- * A bucket filter only makes sense while the provider filter is Codex; any other
+ * CPA partitions only Codex and Claude credentials by bucket; the pools are
+ * declared under `codex-buckets` in config.yaml for both providers.
+ */
+export const providerSupportsBuckets = (provider: string): boolean =>
+  BUCKET_PROVIDERS.has(normalizeProviderKey(provider));
+
+/**
+ * A bucket filter only makes sense while the provider filter is a bucket provider; any other
  * provider (including 'all') drops it back to 'all' so the hidden selector can
  * never keep narrowing the results.
  */

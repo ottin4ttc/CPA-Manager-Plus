@@ -27,25 +27,25 @@ describe('authFileConfiguration provider capabilities', () => {
       websockets: true,
       xaiRouting: false,
       claudeCloak: false,
-      codexBucket: true,
+      bucket: true,
     });
     expect(getAuthFileConfigurationCapabilities('grok')).toEqual({
       websockets: true,
       xaiRouting: true,
       claudeCloak: false,
-      codexBucket: false,
+      bucket: false,
     });
     expect(getAuthFileConfigurationCapabilities('claude')).toEqual({
       websockets: false,
       xaiRouting: false,
       claudeCloak: true,
-      codexBucket: false,
+      bucket: true,
     });
     expect(getAuthFileConfigurationCapabilities('gemini')).toEqual({
       websockets: false,
       xaiRouting: false,
       claudeCloak: false,
-      codexBucket: false,
+      bucket: false,
     });
   });
 });
@@ -496,11 +496,11 @@ describe('buildRedactedAuthFileConfigurationText', () => {
   });
 });
 
-describe('authFileConfiguration codex bucket', () => {
-  it('exposes the bucket field only for codex accounts', () => {
-    expect(getAuthFileConfigurationCapabilities('codex').codexBucket).toBe(true);
-    expect(getAuthFileConfigurationCapabilities('claude').codexBucket).toBe(false);
-    expect(getAuthFileConfigurationCapabilities('xai').codexBucket).toBe(false);
+describe('authFileConfiguration bucket', () => {
+  it('exposes the bucket field only for codex and claude accounts', () => {
+    expect(getAuthFileConfigurationCapabilities('codex').bucket).toBe(true);
+    expect(getAuthFileConfigurationCapabilities('claude').bucket).toBe(true);
+    expect(getAuthFileConfigurationCapabilities('xai').bucket).toBe(false);
   });
 
   it('reads the stored bucket tag into the draft', () => {

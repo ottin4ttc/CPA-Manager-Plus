@@ -328,13 +328,16 @@ describe('buildMonitoringInitialDrilldownFilters', () => {
     expect(buildMonitoringInitialDrilldownFilters('?other=1').bucket).toBe('all');
   });
 
-  it('reads an explicit bucket query param verbatim when the link scopes to codex', () => {
+  it('reads an explicit bucket query param verbatim when the link scopes to codex or claude', () => {
     expect(buildMonitoringInitialDrilldownFilters('?provider=codex&bucket=anon').bucket).toBe(
+      'anon'
+    );
+    expect(buildMonitoringInitialDrilldownFilters('?provider=claude&bucket=anon').bucket).toBe(
       'anon'
     );
   });
 
-  it('drops the bucket query param unless the link scopes to codex', () => {
+  it('drops the bucket query param unless the link scopes to a bucket provider', () => {
     expect(buildMonitoringInitialDrilldownFilters('?bucket=anon').bucket).toBe('all');
     expect(buildMonitoringInitialDrilldownFilters('?provider=gemini&bucket=anon').bucket).toBe(
       'all'
