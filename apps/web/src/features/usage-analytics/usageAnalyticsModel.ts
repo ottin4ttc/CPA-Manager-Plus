@@ -1024,11 +1024,11 @@ export const buildUsageApiKeyTimeline = (
     };
   });
 
-const rowTotalCost = (row: { cost?: number }) => toNumber(row.cost);
+export const rowTotalCost = (row: { cost?: number }) => toNumber(row.cost);
 
 // CNY real spend reported by provider rules. Left undefined when the backend did not
 // report it so USD-only rows (and older servers) keep their exact shape.
-const toOptionalCny = (value: unknown): number | undefined =>
+export const toOptionalCny = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 
 const sumOptionalCny = (left?: number, right?: number): number | undefined =>
@@ -1041,7 +1041,7 @@ export const USAGE_CNY_PER_USD = 7.2;
 export const costInUsd = (value: { estimatedCost: number; estimatedCostCny?: number }) =>
   value.estimatedCost + (value.estimatedCostCny ?? 0) / USAGE_CNY_PER_USD;
 
-const rawCostInUsd = (row: { cost?: number; cost_cny?: number }) =>
+export const rawCostInUsd = (row: { cost?: number; cost_cny?: number }) =>
   costInUsd({ estimatedCost: rowTotalCost(row), estimatedCostCny: toOptionalCny(row.cost_cny) });
 
 const usageRankMetricValue = (row: UsageRankRow, metric: UsageTrendMetricKey) => {
