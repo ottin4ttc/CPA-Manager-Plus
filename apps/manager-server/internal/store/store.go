@@ -11,6 +11,7 @@ import (
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/model"
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/accountaction"
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/apikeyalias"
+	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/apikeygroup"
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/codexinspection"
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/datamigration"
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/repository/deadletter"
@@ -55,6 +56,7 @@ type ModelPriceSyncResult = model.ModelPriceSyncResult
 type ModelUsageStat = model.ModelUsageStat
 type ModelUsageSummary = model.ModelUsageSummary
 type APIKeyAlias = model.APIKeyAlias
+type APIKeyGroup = model.APIKeyGroup
 type QuotaCooldown = model.QuotaCooldown
 type QuotaCooldownUpsert = model.QuotaCooldownUpsert
 type AccountQuotaSnapshot = model.AccountQuotaSnapshot
@@ -149,6 +151,7 @@ type Store struct {
 	ProviderPrices   providerprice.Repository
 	EventCosts       usageeventcost.Repository
 	APIKeyAliases    apikeyalias.Repository
+	APIKeyGroups     apikeygroup.Repository
 	AccountActions   accountaction.Repository
 	CodexInspections codexinspection.Repository
 	DataMigrations   datamigration.Repository
@@ -178,6 +181,7 @@ func New(db *sql.DB, protector ...*security.Protector) *Store {
 		ProviderPrices:   providerprice.New(db),
 		EventCosts:       usageeventcost.New(db),
 		APIKeyAliases:    apikeyalias.New(db),
+		APIKeyGroups:     apikeygroup.New(db),
 		AccountActions:   accountaction.New(db),
 		CodexInspections: codexinspection.New(db),
 		DataMigrations:   datamigration.New(db),
@@ -326,6 +330,14 @@ func (s *Store) UpsertAPIKeyAliasesWithActiveHashes(ctx context.Context, aliases
 
 func (s *Store) DeleteAPIKeyAlias(ctx context.Context, apiKeyHash string) error {
 	return s.APIKeyAliases.Delete(ctx, apiKeyHash)
+}
+
+func (s *Store) LoadAPIKeyGroups(ctx context.Context) ([]APIKeyGroup, error) {
+	return s.APIKeyGroups.LoadAll(ctx)
+}
+
+func (s *Store) ReplaceAPIKeyGroups(ctx context.Context, groups []APIKeyGroup) error {
+	return s.APIKeyGroups.ReplaceAll(ctx, groups)
 }
 
 func (s *Store) UpsertAccountActionCandidate(ctx context.Context, input AccountActionCandidateUpsert) (AccountActionCandidate, error) {

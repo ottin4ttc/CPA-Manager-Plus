@@ -981,7 +981,10 @@ func Migrate(db *sql.DB) error {
 	if err := ensureModelPriceColumns(db); err != nil {
 		return err
 	}
-	return ensureUsageEventCostSchema(db)
+	if err := ensureUsageEventCostSchema(db); err != nil {
+		return err
+	}
+	return ensureAPIKeyGroupsSchema(db)
 }
 
 func ensureLegacyQuotaSnapshotMigrationState(db *sql.DB) error {
