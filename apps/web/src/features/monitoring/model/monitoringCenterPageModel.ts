@@ -180,6 +180,7 @@ export const buildMonitoringInitialStateFromQuery = (
   const cacheStatus = params.get('cache_status')?.trim();
   const headerTraceId = params.get('header_trace_id')?.trim();
   const bucket = params.get('bucket')?.trim();
+  const apiKeyGroup = params.get('api_key_group')?.trim();
   const hasRange = fromMs !== null && toMs !== null && fromMs < toMs;
   const hasStructuredScopeFilter = Boolean(
     authFile ||
@@ -189,7 +190,8 @@ export const buildMonitoringInitialStateFromQuery = (
     minLatencyMs ||
     cacheStatus ||
     headerTraceId ||
-    bucket
+    bucket ||
+    apiKeyGroup
   );
   const queryDefinesScope = Boolean(
     hasRange || model || apiKeyHash || status || provider || searchQuery || hasStructuredScopeFilter
@@ -236,6 +238,8 @@ export type MonitoringDrilldownFilters = {
   minLatencyMs: number | undefined;
   cacheStatus: string;
   bucket: string;
+  // Reporting group name, 'all' when unset (same vocabulary as bucket).
+  apiKeyGroup: string;
 };
 
 export const buildMonitoringInitialDrilldownFilters = (
@@ -260,6 +264,7 @@ export const buildMonitoringInitialDrilldownFilters = (
     bucket: providerSupportsBuckets(params.get('provider') ?? '')
       ? params.get('bucket')?.trim() || 'all'
       : 'all',
+    apiKeyGroup: params.get('api_key_group')?.trim() || 'all',
   };
 };
 
@@ -269,6 +274,7 @@ export type MonitoringActiveScopeFilterState = {
   model: string;
   channel: string;
   bucket: string;
+  apiKeyGroup: string;
   apiKeyHash: string;
   headerTraceId: string;
   status: StatusFilter;
@@ -287,6 +293,7 @@ export const hasActiveMonitoringScopeFilter = (
   filters.model !== 'all' ||
   filters.channel !== 'all' ||
   filters.bucket !== 'all' ||
+  filters.apiKeyGroup !== 'all' ||
   filters.apiKeyHash !== 'all' ||
   filters.headerTraceId !== 'all' ||
   filters.status !== 'all' ||

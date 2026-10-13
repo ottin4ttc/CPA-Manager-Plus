@@ -151,6 +151,10 @@ export const buildScopeFilteredRows = (
           .map(([authIndex]) => normalizeScopeValue(authIndex))
       )
     : null;
+  // Like the bucket above, an active group with no members must drop every row.
+  const apiKeyGroupHashes = scopeFilters.apiKeyGroupHashes
+    ? new Set(scopeFilters.apiKeyGroupHashes.map(normalizeScopeValue))
+    : null;
 
   return rows.filter((row) => {
     if (isActiveScopeFilterValue(scopeFilters.account)) {
@@ -234,6 +238,10 @@ export const buildScopeFilteredRows = (
     }
 
     if (bucketAuthIndices && !bucketAuthIndices.has(normalizeScopeValue(row.authIndex))) {
+      return false;
+    }
+
+    if (apiKeyGroupHashes && !apiKeyGroupHashes.has(normalizeScopeValue(row.apiKeyHash))) {
       return false;
     }
 

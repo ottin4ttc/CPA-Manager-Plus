@@ -261,6 +261,18 @@ describe('monitoringCenterPageModel filter options', () => {
     expect(state.customEndInput).toBeTruthy();
   });
 
+  it('reads the reporting group from a drilldown link and treats it as a full scope', () => {
+    const query = '?api_key_group=%E4%B8%9A%E5%8A%A1%E7%BA%BF%2F%E5%B0%8F%E9%BA%A6';
+    expect(buildMonitoringInitialDrilldownFilters(query).apiKeyGroup).toBe('业务线/小麦');
+    expect(buildMonitoringInitialDrilldownFilters('').apiKeyGroup).toBe('all');
+    const state = buildMonitoringInitialStateFromQuery(query, {
+      ...getDefaultMonitoringCenterUiState(),
+      selectedModel: 'persisted-model',
+    });
+    expect(state.activeDataTab).toBe('realtime');
+    expect(state.selectedModel).toBe('all');
+  });
+
   it('switches to the realtime tab when only a bucket drilldown is present', () => {
     const state = buildMonitoringInitialStateFromQuery(
       '?bucket=anon',
@@ -361,6 +373,7 @@ describe('hasActiveMonitoringScopeFilter', () => {
     model: 'all',
     channel: 'all',
     bucket: 'all',
+    apiKeyGroup: 'all',
     apiKeyHash: 'all',
     headerTraceId: 'all',
     status: 'all',
@@ -385,6 +398,12 @@ describe('hasActiveMonitoringScopeFilter', () => {
 
   it('is active once a real bucket is selected', () => {
     expect(hasActiveMonitoringScopeFilter({ ...baseFilters, bucket: 'anon' })).toBe(true);
+  });
+
+  it('is active once a reporting group is selected', () => {
+    expect(hasActiveMonitoringScopeFilter({ ...baseFilters, apiKeyGroup: '业务线/小麦' })).toBe(
+      true
+    );
   });
 
   it('is active for the untagged bucket sentinel too', () => {

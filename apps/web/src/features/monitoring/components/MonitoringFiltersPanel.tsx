@@ -14,6 +14,7 @@ type MonitoringFiltersPanelProps = {
   selectedModel: string;
   selectedChannel: string;
   selectedBucket: string;
+  selectedApiKeyGroup: string;
   selectedApiKeyHash: string;
   selectedStatus: string;
   searchInput: string;
@@ -22,6 +23,7 @@ type MonitoringFiltersPanelProps = {
   modelOptions: ReadonlyArray<SelectOption>;
   channelOptions: ReadonlyArray<SelectOption>;
   bucketOptions: ReadonlyArray<SelectOption>;
+  apiKeyGroupOptions: ReadonlyArray<SelectOption>;
   apiKeyOptions: ReadonlyArray<SelectOption>;
   statusOptions: ReadonlyArray<SelectOption>;
   combinedError: string | null;
@@ -29,6 +31,8 @@ type MonitoringFiltersPanelProps = {
   overallLoading: boolean;
   /** Buckets are codex/claude-only; the page passes false whenever the provider filter is neither. */
   showBucketFilter: boolean;
+  /** Hidden without a manager server or when no reporting group exists. */
+  showApiKeyGroupFilter: boolean;
   t: TFunction;
   onTimeRangeChange: (value: MonitoringTimeRange) => void;
   onAutoRefreshChange: (value: string) => void;
@@ -38,6 +42,7 @@ type MonitoringFiltersPanelProps = {
   onModelChange: (value: string) => void;
   onChannelChange: (value: string) => void;
   onBucketChange: (value: string) => void;
+  onApiKeyGroupChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   onSearchChange: (value: string) => void;
@@ -76,6 +81,7 @@ export function MonitoringFiltersPanel({
   selectedModel,
   selectedChannel,
   selectedBucket,
+  selectedApiKeyGroup,
   selectedApiKeyHash,
   selectedStatus,
   searchInput,
@@ -84,12 +90,14 @@ export function MonitoringFiltersPanel({
   modelOptions,
   channelOptions,
   bucketOptions,
+  apiKeyGroupOptions,
   apiKeyOptions,
   statusOptions,
   combinedError,
   usageStatisticsEnabled,
   overallLoading,
   showBucketFilter,
+  showApiKeyGroupFilter,
   t,
   onTimeRangeChange,
   onAutoRefreshChange,
@@ -99,6 +107,7 @@ export function MonitoringFiltersPanel({
   onModelChange,
   onChannelChange,
   onBucketChange,
+  onApiKeyGroupChange,
   onApiKeyChange,
   onStatusChange,
   onSearchChange,
@@ -197,6 +206,7 @@ export function MonitoringFiltersPanel({
               onChange={onAccountFilterChange}
               ariaLabel={t('monitoring.filter_account')}
               triggerClassName={styles.filterSelectTrigger}
+              searchable
             />
           </div>
           <Select
@@ -205,6 +215,7 @@ export function MonitoringFiltersPanel({
             onChange={onProviderChange}
             ariaLabel={t('monitoring.filter_provider')}
             triggerClassName={styles.filterSelectTrigger}
+            searchable
           />
           <Select
             value={selectedModel}
@@ -212,6 +223,7 @@ export function MonitoringFiltersPanel({
             onChange={onModelChange}
             ariaLabel={t('monitoring.filter_model')}
             triggerClassName={styles.filterSelectTrigger}
+            searchable
           />
           <Select
             value={selectedChannel}
@@ -219,6 +231,7 @@ export function MonitoringFiltersPanel({
             onChange={onChannelChange}
             ariaLabel={t('monitoring.filter_channel')}
             triggerClassName={styles.filterSelectTrigger}
+            searchable
           />
           {showBucketFilter ? (
             <Select
@@ -227,6 +240,17 @@ export function MonitoringFiltersPanel({
               onChange={onBucketChange}
               ariaLabel={t('monitoring.filter_bucket')}
               triggerClassName={styles.filterSelectTrigger}
+              searchable
+            />
+          ) : null}
+          {showApiKeyGroupFilter ? (
+            <Select
+              value={selectedApiKeyGroup}
+              options={apiKeyGroupOptions}
+              onChange={onApiKeyGroupChange}
+              ariaLabel={t('api_key_groups.filter_label')}
+              triggerClassName={styles.filterSelectTrigger}
+              searchable
             />
           ) : null}
           <Select
@@ -235,6 +259,7 @@ export function MonitoringFiltersPanel({
             onChange={onApiKeyChange}
             ariaLabel={t('monitoring.filter_api_key')}
             triggerClassName={styles.filterSelectTrigger}
+            searchable
           />
           <Select
             value={selectedStatus}

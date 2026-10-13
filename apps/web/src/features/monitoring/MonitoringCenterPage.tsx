@@ -110,6 +110,12 @@ import {
   collectObservedBucketNames,
   providerSupportsBuckets,
 } from '@/features/authFiles/bucketOptions';
+import {
+  buildApiKeyGroupOptions,
+  filterApiKeyOptionsByGroup,
+  resolveApiKeyGroupHashes,
+} from '@/features/apiKeyGroups/apiKeyGroupFilter';
+import { useApiKeyGroups } from '@/features/apiKeyGroups/hooks/useApiKeyGroups';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
 import { useHeaderSnapshotsLoader } from '@/features/monitoring/hooks/useHeaderSnapshotsLoader';
 import {
@@ -275,6 +281,16 @@ export function MonitoringCenterPage() {
   const [drilldownBucket, setDrilldownBucket] = useState(
     () => initialMonitoringDrilldownFilters.current.bucket
   );
+  const [drilldownApiKeyGroup, setDrilldownApiKeyGroup] = useState(
+    () => initialMonitoringDrilldownFilters.current.apiKeyGroup
+  );
+  const apiKeyGroups = useApiKeyGroups();
+  const apiKeyGroupHashes = useMemo(
+    () => resolveApiKeyGroupHashes(apiKeyGroups.groups, drilldownApiKeyGroup),
+    [apiKeyGroups.groups, drilldownApiKeyGroup]
+  );
+  // A selected group reads as empty until the group list arrives.
+  const waitingForApiKeyGroups = apiKeyGroupHashes !== null && apiKeyGroups.loading;
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [expandedApiKeys, setExpandedApiKeys] = useState<Record<string, boolean>>({});
   const [focusedAccountId, setFocusedAccountId] = useState<string | null>(null);
@@ -424,10 +440,12 @@ export function MonitoringCenterPage() {
       channel: selectedChannel,
       bucket: drilldownBucket || undefined,
       apiKeyHash: selectedApiKeyHash,
+      apiKeyGroupHashes: apiKeyGroupHashes ?? undefined,
       headerTraceId: selectedHeaderTraceId,
       status: selectedStatus,
     }),
     [
+      apiKeyGroupHashes,
       drilldownAuthFile,
       drilldownAuthIndex,
       drilldownBucket,
@@ -474,6 +492,7 @@ export function MonitoringCenterPage() {
     searchApiKeyHash: deferredSearchApiKeyHash,
     scopeFilters: monitoringScopeFilters,
     activeDataTab,
+    deferAnalytics: waitingForApiKeyGroups,
   });
 
   const loadHeaderSnapshots = useHeaderSnapshotsLoader({
@@ -859,9 +878,25 @@ export function MonitoringCenterPage() {
   );
 
   const apiKeyOptions = useMemo(
-    () => buildApiKeyOptionsFromRows(monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t),
-    [monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t]
+    () =>
+      filterApiKeyOptionsByGroup(
+        buildApiKeyOptionsFromRows(monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t),
+        apiKeyGroupHashes,
+        selectedApiKeyHash
+      ),
+    [apiKeyGroupHashes, monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t]
   );
+  const apiKeyGroupOptions = useMemo(
+    () =>
+      buildApiKeyGroupOptions(
+        apiKeyGroups.groups,
+        drilldownApiKeyGroup,
+        t('api_key_groups.filter_all')
+      ),
+    [apiKeyGroups.groups, drilldownApiKeyGroup, t]
+  );
+  const showApiKeyGroupFilter =
+    apiKeyGroups.available && (apiKeyGroups.groups.length > 0 || drilldownApiKeyGroup !== 'all');
 
   const statusOptions = useMemo(() => buildStatusOptions(t), [t]);
 
@@ -1065,6 +1100,7 @@ export function MonitoringCenterPage() {
     model: selectedModel,
     channel: selectedChannel,
     bucket: drilldownBucket,
+    apiKeyGroup: drilldownApiKeyGroup,
     apiKeyHash: selectedApiKeyHash,
     headerTraceId: selectedHeaderTraceId,
     status: selectedStatus,
@@ -1204,6 +1240,7 @@ export function MonitoringCenterPage() {
     setDrilldownMinLatencyMs(undefined);
     setDrilldownCacheStatus('');
     setDrilldownBucket('all');
+    setDrilldownApiKeyGroup('all');
   }, []);
 
   const renderMonitoringEmptyState = () => (
@@ -1961,6 +1998,7 @@ export function MonitoringCenterPage() {
         selectedModel={selectedModel}
         selectedChannel={selectedChannel}
         selectedBucket={drilldownBucket}
+        selectedApiKeyGroup={drilldownApiKeyGroup}
         selectedApiKeyHash={selectedApiKeyHash}
         selectedStatus={selectedStatus}
         searchInput={searchInput}
@@ -1969,12 +2007,14 @@ export function MonitoringCenterPage() {
         modelOptions={modelOptions}
         channelOptions={channelOptions}
         bucketOptions={bucketOptions}
+        apiKeyGroupOptions={apiKeyGroupOptions}
         apiKeyOptions={apiKeyOptions}
         statusOptions={statusOptions}
         combinedError={combinedError}
         usageStatisticsEnabled={Boolean(config?.usageStatisticsEnabled)}
         overallLoading={overallLoading}
         showBucketFilter={showBucketFilter}
+        showApiKeyGroupFilter={showApiKeyGroupFilter}
         t={t}
         onTimeRangeChange={handleTimeRangeChange}
         onAutoRefreshChange={setAutoRefreshMs}
@@ -1984,6 +2024,7 @@ export function MonitoringCenterPage() {
         onModelChange={setSelectedModel}
         onChannelChange={handleChannelChange}
         onBucketChange={handleBucketChange}
+        onApiKeyGroupChange={setDrilldownApiKeyGroup}
         onApiKeyChange={setSelectedApiKeyHash}
         onStatusChange={(value) => setSelectedStatus(value as StatusFilter)}
         onSearchChange={setSearchInput}

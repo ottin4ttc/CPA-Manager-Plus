@@ -320,6 +320,7 @@ export function useMonitoringData({
   searchApiKeyHash,
   scopeFilters,
   activeDataTab = 'accounts',
+  deferAnalytics = false,
 }: UseMonitoringDataParams): UseMonitoringDataReturn {
   const connectionScopeKeyRef = useRef<string | null>(connectionScopeKey ?? null);
   useLayoutEffect(() => {
@@ -528,7 +529,7 @@ export function useMonitoringData({
   );
 
   const analytics = useMonitoringAnalytics({
-    fromMs: analyticsBounds?.startMs,
+    fromMs: deferAnalytics ? undefined : analyticsBounds?.startMs,
     toMs: analyticsBounds?.endMs,
     nowMs: analyticsNowMs,
     dataScopeKey: analyticsScopeKey,
@@ -1047,7 +1048,7 @@ export function useMonitoringData({
   const statusChips = useMemo(() => buildStatusChips(metadata), [metadata]);
 
   return {
-    loading: loading || analytics.loading,
+    loading: loading || analytics.loading || deferAnalytics,
     error: [error, analytics.error, filterSelectorsAnalytics.error].filter(Boolean).join('；'),
     authFiles,
     authFilesLoaded,

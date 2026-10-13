@@ -16,6 +16,7 @@ import type {
 } from '@/services/api/usageService';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { UNTAGGED_BUCKET_FILTER } from '@/features/authFiles/bucketOptions';
+import { buildApiKeyHashFilter } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import {
   buildSourceInfoMap,
   resolveSourceDisplay,
@@ -336,7 +337,13 @@ export const buildAnalyticsFilters = (
   if (isActiveFilterValue(scopeFilters.model)) {
     filters.models = [scopeFilters.model!.trim()];
   }
-  if (isActiveFilterValue(scopeFilters.apiKeyHash)) {
+  if (scopeFilters.apiKeyGroupHashes) {
+    // Expanded before the account constraint below, which intersects with it.
+    filters.api_key_hashes = buildApiKeyHashFilter(
+      scopeFilters.apiKeyHash,
+      scopeFilters.apiKeyGroupHashes
+    );
+  } else if (isActiveFilterValue(scopeFilters.apiKeyHash)) {
     filters.api_key_hashes = [scopeFilters.apiKeyHash!.trim().toLowerCase()];
   }
   if (isActiveFilterValue(scopeFilters.authFile)) {

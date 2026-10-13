@@ -5,6 +5,7 @@ import type {
 } from '@/services/api/usageService';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import { UNTAGGED_BUCKET_FILTER } from '@/features/authFiles/bucketOptions';
+import { NO_MATCHING_API_KEY_HASH } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import {
   buildAnalyticsFilters,
   buildMonitoringAccountFilterValue,
@@ -248,6 +249,33 @@ describe('buildAnalyticsFilters', () => {
       )
     ).toEqual({
       api_key_hashes: ['api-key-hash'],
+    });
+  });
+
+  it('expands a reporting group into api_key_hashes and intersects the API key', () => {
+    const h1 = '1'.repeat(64);
+    const h2 = '2'.repeat(64);
+    expect(buildAnalyticsFilters({ apiKeyGroupHashes: [h2, h1] }, new Map(), [])).toEqual({
+      api_key_hashes: [h1, h2],
+    });
+    expect(
+      buildAnalyticsFilters({ apiKeyHash: h1, apiKeyGroupHashes: [h1, h2] }, new Map(), [])
+    ).toEqual({ api_key_hashes: [h1] });
+    expect(
+      buildAnalyticsFilters({ apiKeyHash: 'other', apiKeyGroupHashes: [h1] }, new Map(), [])
+        .api_key_hashes
+    ).toEqual([NO_MATCHING_API_KEY_HASH]);
+  });
+
+  it('matches nothing for a reporting group without members', () => {
+    expect(buildAnalyticsFilters({ apiKeyGroupHashes: [] }, new Map(), []).api_key_hashes).toEqual([
+      NO_MATCHING_API_KEY_HASH,
+    ]);
+  });
+
+  it('keeps the single API key filter unchanged without a reporting group', () => {
+    expect(buildAnalyticsFilters({ apiKeyHash: 'ABC' }, new Map(), [])).toEqual({
+      api_key_hashes: ['abc'],
     });
   });
 

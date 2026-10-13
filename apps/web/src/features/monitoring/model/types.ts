@@ -384,6 +384,9 @@ export interface MonitoringScopeFilters {
   channel?: string;
   bucket?: string;
   apiKeyHash?: string;
+  // Member hashes of the selected reporting group; undefined when no group is
+  // selected. An empty list must match nothing.
+  apiKeyGroupHashes?: string[];
   status?: 'all' | 'success' | 'failed';
   minLatencyMs?: number;
   cacheStatus?: string;
@@ -401,6 +404,10 @@ export interface UseMonitoringDataParams {
   searchApiKeyHash?: string;
   scopeFilters?: MonitoringScopeFilters;
   activeDataTab?: MonitoringDataTab;
+  // Holds scoped analytics requests while a filter is still resolving (the
+  // reporting group list), so the page never shows a result for a half-built
+  // scope.
+  deferAnalytics?: boolean;
 }
 
 export interface UseMonitoringDataReturn {
