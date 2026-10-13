@@ -1,5 +1,6 @@
 // Package providerprice stores the real CNY prices providers charge per model,
-// including daily time windows that scale the rate.
+// including daily time windows that scale the rate and context-size tiers that
+// replace it.
 package providerprice
 
 import (
@@ -114,6 +115,42 @@ func (r *repository) LoadAllTx(ctx context.Context, tx *sql.Tx) ([]model.Provide
 	if err := windowRows.Err(); err != nil {
 		return nil, err
 	}
+
+	tierRows, err := tx.QueryContext(ctx, `select
+		price_id, threshold_tokens, prompt_per_1m, completion_per_1m,
+		cache_read_per_1m, cache_creation_per_1m, cache_read_configured, cache_creation_configured
+		from provider_model_price_context_tiers order by price_id, threshold_tokens`)
+	if err != nil {
+		return nil, err
+	}
+	defer tierRows.Close()
+	for tierRows.Next() {
+		var priceID int64
+		var tier model.ProviderPriceContextTier
+		var cacheReadConfigured, cacheCreationConfigured int
+		if err := tierRows.Scan(
+			&priceID,
+			&tier.ThresholdTokens,
+			&tier.Prompt,
+			&tier.Completion,
+			&tier.CacheRead,
+			&tier.CacheCreation,
+			&cacheReadConfigured,
+			&cacheCreationConfigured,
+		); err != nil {
+			return nil, err
+		}
+		tier.CacheReadConfigured = cacheReadConfigured != 0
+		tier.CacheCreationConfigured = cacheCreationConfigured != 0
+		position, ok := index[priceID]
+		if !ok {
+			continue
+		}
+		prices[position].ContextTiers = append(prices[position].ContextTiers, tier)
+	}
+	if err := tierRows.Err(); err != nil {
+		return nil, err
+	}
 	return prices, nil
 }
 
@@ -172,6 +209,14 @@ func (r *repository) ReplaceAll(ctx context.Context, prices []model.ProviderMode
 		return nil, err
 	}
 	defer insertWindow.Close()
+	insertTier, err := tx.PrepareContext(ctx, `insert into provider_model_price_context_tiers (
+		price_id, threshold_tokens, prompt_per_1m, completion_per_1m,
+		cache_read_per_1m, cache_creation_per_1m, cache_read_configured, cache_creation_configured
+	) values (?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return nil, err
+	}
+	defer insertTier.Close()
 
 	keptIDs := make([]any, 0, len(normalized))
 	for position := range normalized {
@@ -206,6 +251,24 @@ func (r *repository) ReplaceAll(ctx context.Context, prices []model.ProviderMode
 			}
 			window.ID, err = result.LastInsertId()
 			if err != nil {
+				return nil, err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `delete from provider_model_price_context_tiers where price_id = ?`, price.ID); err != nil {
+			return nil, err
+		}
+		for _, tier := range price.ContextTiers {
+			if _, err := insertTier.ExecContext(
+				ctx,
+				price.ID,
+				tier.ThresholdTokens,
+				tier.Prompt,
+				tier.Completion,
+				tier.CacheRead,
+				tier.CacheCreation,
+				tier.CacheReadConfigured,
+				tier.CacheCreationConfigured,
+			); err != nil {
 				return nil, err
 			}
 		}

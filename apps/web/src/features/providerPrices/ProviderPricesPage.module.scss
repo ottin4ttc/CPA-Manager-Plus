@@ -279,6 +279,10 @@
   gap: 8px;
 }
 
+.contextTierFields {
+  grid-template-columns: repeat(5, minmax(110px, 1fr)) auto;
+}
+
 .weekdayField {
   display: flex;
   align-items: center;

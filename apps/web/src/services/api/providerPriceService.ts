@@ -20,6 +20,18 @@ export interface ProviderPriceWindow {
   weekdays?: number[];
 }
 
+/** Replaces every base rate when normalized input tokens exceed `thresholdTokens`. */
+export interface ProviderPriceContextTier {
+  thresholdTokens: number;
+  /** CNY per 1M tokens. */
+  prompt: number;
+  completion: number;
+  cacheRead?: number;
+  cacheCreation?: number;
+  cacheReadConfigured?: boolean;
+  cacheCreationConfigured?: boolean;
+}
+
 export interface ProviderModelPrice {
   id?: number;
   provider: string;
@@ -37,6 +49,8 @@ export interface ProviderModelPrice {
   windows?: ProviderPriceWindow[];
   /** `YYYY-MM-DD` dates (in `timezone`) on which no window applies: the whole day is base rate. */
   offDays?: string[];
+  /** Sorted by threshold; the highest exceeded tier applies to the whole request. */
+  contextTiers?: ProviderPriceContextTier[];
   updatedAtMs?: number;
 }
 

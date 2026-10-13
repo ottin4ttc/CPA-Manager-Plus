@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { IconPencil, IconPlus, IconTrash2, IconX } from '@/components/ui/icons';
+import { formatContextThreshold } from '@/features/monitoring/model/modelPricesPageModel';
 import { usePanelFeatureAvailability } from '@/hooks/usePanelFeatureAvailability';
 import {
   getObservedProviderModels,
@@ -22,6 +23,7 @@ import {
   buildProviderPriceFromDraft,
   buildUnpricedObservedModels,
   calculateRepriceProgress,
+  createEmptyContextTierDraft,
   createEmptyProviderPriceDraft,
   createEmptyWindowDraft,
   createProviderPriceDraft,
@@ -36,6 +38,7 @@ import {
   removeProviderPrice,
   toggleWeekday,
   upsertProviderPrice,
+  type ProviderPriceContextTierDraft,
   type ProviderPriceDraft,
   type ProviderPriceWindowDraft,
   type WeekdayLabels,
@@ -178,7 +181,7 @@ export function ProviderPricesPage() {
   };
 
   const setDraftField = (
-    field: keyof Omit<ProviderPriceDraft, 'windows' | 'id'>,
+    field: keyof Omit<ProviderPriceDraft, 'windows' | 'contextTiers' | 'id'>,
     value: string
   ) => {
     setDraft((previous) => ({ ...previous, [field]: value }));
@@ -219,6 +222,33 @@ export function ProviderPricesPage() {
     setDraft((previous) => ({
       ...previous,
       windows: previous.windows.filter((_, windowIndex) => windowIndex !== index),
+    }));
+  };
+
+  const setContextTierField = (
+    index: number,
+    field: keyof ProviderPriceContextTierDraft,
+    value: string
+  ) => {
+    setDraft((previous) => ({
+      ...previous,
+      contextTiers: previous.contextTiers.map((tier, tierIndex) =>
+        tierIndex === index ? { ...tier, [field]: value } : tier
+      ),
+    }));
+  };
+
+  const addContextTier = () => {
+    setDraft((previous) => ({
+      ...previous,
+      contextTiers: [...previous.contextTiers, createEmptyContextTierDraft()],
+    }));
+  };
+
+  const removeContextTier = (index: number) => {
+    setDraft((previous) => ({
+      ...previous,
+      contextTiers: previous.contextTiers.filter((_, tierIndex) => tierIndex !== index),
     }));
   };
 
@@ -571,6 +601,90 @@ export function ProviderPricesPage() {
               ))}
             </div>
 
+            <div className={styles.windowsEditor}>
+              <div className={styles.windowsHeader}>
+                <strong>{t('provider_prices.context_tiers')}</strong>
+                <span className={styles.mutedText}>{t('provider_prices.context_tiers_hint')}</span>
+                <Button size="xs" variant="secondary" onClick={addContextTier}>
+                  <IconPlus size={12} />
+                  {t('provider_prices.add_context_tier')}
+                </Button>
+              </div>
+              {draft.contextTiers.map((tier, index) => (
+                <div key={index} className={styles.windowRow}>
+                  <div className={`${styles.windowFields} ${styles.contextTierFields}`}>
+                    <Input
+                      label={t('provider_prices.context_tier_threshold')}
+                      className={styles.compactInput}
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={tier.threshold}
+                      onChange={(event) =>
+                        setContextTierField(index, 'threshold', event.target.value)
+                      }
+                      placeholder="272000"
+                    />
+                    <Input
+                      label={`${t('usage_stats.model_price_prompt')} (¥/1M)`}
+                      className={styles.compactInput}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={tier.prompt}
+                      onChange={(event) => setContextTierField(index, 'prompt', event.target.value)}
+                      placeholder="0.0000"
+                    />
+                    <Input
+                      label={`${t('usage_stats.model_price_completion')} (¥/1M)`}
+                      className={styles.compactInput}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={tier.completion}
+                      onChange={(event) =>
+                        setContextTierField(index, 'completion', event.target.value)
+                      }
+                      placeholder="0.0000"
+                    />
+                    <Input
+                      label={`${t('usage_stats.model_price_cache_read')} (¥/1M)`}
+                      className={styles.compactInput}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={tier.cacheRead}
+                      onChange={(event) =>
+                        setContextTierField(index, 'cacheRead', event.target.value)
+                      }
+                      placeholder={t('provider_prices.cache_placeholder')}
+                    />
+                    <Input
+                      label={`${t('usage_stats.model_price_cache_creation')} (¥/1M)`}
+                      className={styles.compactInput}
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={tier.cacheCreation}
+                      onChange={(event) =>
+                        setContextTierField(index, 'cacheCreation', event.target.value)
+                      }
+                      placeholder={t('provider_prices.cache_placeholder')}
+                    />
+                    <button
+                      type="button"
+                      className={styles.iconAction}
+                      title={t('provider_prices.remove_context_tier')}
+                      aria-label={t('provider_prices.remove_context_tier')}
+                      onClick={() => removeContextTier(index)}
+                    >
+                      <IconTrash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div className={styles.editorActions}>
               <Button
                 size="xs"
@@ -610,6 +724,7 @@ export function ProviderPricesPage() {
                       <th>{t('usage_stats.model_price_completion')}</th>
                       <th>{t('usage_stats.model_price_cache_read')}</th>
                       <th>{t('usage_stats.model_price_cache_creation')}</th>
+                      <th>{t('provider_prices.context_tiers')}</th>
                       <th>{t('provider_prices.windows')}</th>
                       <th>{t('provider_prices.timezone')}</th>
                       <th>{t('common.action')}</th>
@@ -629,6 +744,25 @@ export function ProviderPricesPage() {
                         <td>{renderCacheRate(price.cacheRead, price.cacheReadConfigured)}</td>
                         <td>
                           {renderCacheRate(price.cacheCreation, price.cacheCreationConfigured)}
+                        </td>
+                        <td className={styles.windowCell}>
+                          <div className={styles.windowList}>
+                            {price.contextTiers?.length ? (
+                              price.contextTiers.map((tier) => (
+                                <span
+                                  key={tier.thresholdTokens}
+                                  className={styles.windowBadge}
+                                  title={`${t('usage_stats.model_price_cache_read')}: ${tier.cacheReadConfigured ? formatCnyRate(tier.cacheRead) : t('provider_prices.cache_by_prompt')} · ${t('usage_stats.model_price_cache_creation')}: ${tier.cacheCreationConfigured ? formatCnyRate(tier.cacheCreation) : t('provider_prices.cache_by_prompt')}`}
+                                >
+                                  {`>${formatContextThreshold(tier.thresholdTokens)} ${formatCnyRate(tier.prompt)} / ${formatCnyRate(tier.completion)}`}
+                                </span>
+                              ))
+                            ) : (
+                              <span className={styles.mutedText}>
+                                {t('provider_prices.no_context_tiers')}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className={styles.windowCell}>
                           <div className={styles.windowList}>

@@ -135,7 +135,11 @@ func (b *Book) PriceEvent(event EventInput) EventCost {
 				multiplier = window.Multiplier
 				windowID = window.ID
 			}
-			cost := CostForFlatPrice(tokens, entry.flat) * multiplier
+			flat := entry.flat
+			if len(entry.price.ContextTiers) > 0 {
+				flat = entry.price.ForContext(normalizedInput).FlatPrice()
+			}
+			cost := CostForFlatPrice(tokens, flat) * multiplier
 			return EventCost{
 				Provider:     provider,
 				PricingModel: candidate,

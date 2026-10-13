@@ -32,6 +32,20 @@ type ProviderPriceWindow struct {
 	Weekdays    []int   `json:"weekdays,omitempty"`
 }
 
+// ProviderPriceContextTier replaces every base rate for requests whose
+// normalized input tokens are strictly greater than ThresholdTokens, matching
+// the whole-request long-context pricing providers publish. Unconfigured cache
+// rates fall back to the tier's prompt rate, mirroring the base price.
+type ProviderPriceContextTier struct {
+	ThresholdTokens         int64   `json:"thresholdTokens"`
+	Prompt                  float64 `json:"prompt"`
+	Completion              float64 `json:"completion"`
+	CacheRead               float64 `json:"cacheRead,omitempty"`
+	CacheCreation           float64 `json:"cacheCreation,omitempty"`
+	CacheReadConfigured     bool    `json:"cacheReadConfigured,omitempty"`
+	CacheCreationConfigured bool    `json:"cacheCreationConfigured,omitempty"`
+}
+
 // ProviderModelPrice is the real CNY price one provider charges for one model.
 // Rates are CNY per 1M tokens. Unconfigured cache rates fall back to the
 // prompt rate, so an unknown vendor is never assumed to discount cache hits.
@@ -50,8 +64,10 @@ type ProviderModelPrice struct {
 	Windows                 []ProviderPriceWindow `json:"windows,omitempty"`
 	// OffDays are local dates (YYYY-MM-DD) on which no window applies, so the
 	// whole day charges the base rate. Providers use it for public holidays.
-	OffDays     []string `json:"offDays,omitempty"`
-	UpdatedAtMS int64    `json:"updatedAtMs,omitempty"`
+	OffDays []string `json:"offDays,omitempty"`
+	// ContextTiers are sorted by threshold; the highest exceeded one applies.
+	ContextTiers []ProviderPriceContextTier `json:"contextTiers,omitempty"`
+	UpdatedAtMS  int64                      `json:"updatedAtMs,omitempty"`
 }
 
 const providerPriceOffDayLayout = "2006-01-02"
@@ -98,6 +114,43 @@ func NormalizeProviderModelPrice(price ProviderModelPrice) (ProviderModelPrice, 
 		return ProviderModelPrice{}, fmt.Errorf("invalid off day for %s/%s: %w", normalized.Provider, normalized.Model, err)
 	}
 	normalized.OffDays = offDays
+	tiers, err := normalizeProviderPriceContextTiers(normalized.ContextTiers)
+	if err != nil {
+		return ProviderModelPrice{}, fmt.Errorf("invalid context tier for %s/%s: %w", normalized.Provider, normalized.Model, err)
+	}
+	normalized.ContextTiers = tiers
+	return normalized, nil
+}
+
+func normalizeProviderPriceContextTiers(tiers []ProviderPriceContextTier) ([]ProviderPriceContextTier, error) {
+	if len(tiers) == 0 {
+		return nil, nil
+	}
+	normalized := append([]ProviderPriceContextTier(nil), tiers...)
+	sort.SliceStable(normalized, func(i, j int) bool {
+		return normalized[i].ThresholdTokens < normalized[j].ThresholdTokens
+	})
+	for index := range normalized {
+		tier := &normalized[index]
+		if tier.ThresholdTokens <= 0 {
+			return nil, fmt.Errorf("threshold %d must be positive", tier.ThresholdTokens)
+		}
+		if index > 0 && normalized[index-1].ThresholdTokens == tier.ThresholdTokens {
+			return nil, fmt.Errorf("duplicate threshold %d", tier.ThresholdTokens)
+		}
+		if !validModelPriceRuleValue(tier.Prompt) ||
+			!validModelPriceRuleValue(tier.Completion) ||
+			!validModelPriceRuleValue(tier.CacheRead) ||
+			!validModelPriceRuleValue(tier.CacheCreation) {
+			return nil, fmt.Errorf("invalid price at threshold %d", tier.ThresholdTokens)
+		}
+		if !tier.CacheReadConfigured {
+			tier.CacheRead = 0
+		}
+		if !tier.CacheCreationConfigured {
+			tier.CacheCreation = 0
+		}
+	}
 	return normalized, nil
 }
 
@@ -318,6 +371,25 @@ func LocalMinute(timestampMS int64, location *time.Location) int {
 	}
 	local := time.UnixMilli(timestampMS).In(location)
 	return local.Hour()*60 + local.Minute()
+}
+
+// ForContext returns the price with its base rates replaced by the highest
+// context tier whose threshold the normalized input exceeds. Exact-threshold
+// requests stay in the lower band, matching ModelPrice context tiers.
+func (p ProviderModelPrice) ForContext(normalizedInputTokens int64) ProviderModelPrice {
+	effective := p
+	for _, tier := range p.ContextTiers {
+		if normalizedInputTokens <= tier.ThresholdTokens {
+			break
+		}
+		effective.Prompt = tier.Prompt
+		effective.Completion = tier.Completion
+		effective.CacheRead = tier.CacheRead
+		effective.CacheCreation = tier.CacheCreation
+		effective.CacheReadConfigured = tier.CacheReadConfigured
+		effective.CacheCreationConfigured = tier.CacheCreationConfigured
+	}
+	return effective
 }
 
 // FlatPrice maps the provider rates onto the five-rate ModelPrice shape used by

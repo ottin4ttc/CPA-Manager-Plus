@@ -2,6 +2,7 @@ import {
   DEFAULT_PROVIDER_PRICE_TIMEZONE,
   type ObservedProviderModel,
   type ProviderModelPrice,
+  type ProviderPriceContextTier,
   type ProviderPriceWindow,
   type RepriceState,
 } from '@/services/api/providerPriceService';
@@ -18,6 +19,15 @@ export type ProviderPriceWindowDraft = {
   weekdays: number[];
 };
 
+export type ProviderPriceContextTierDraft = {
+  /** Normalized input tokens the request must exceed. */
+  threshold: string;
+  prompt: string;
+  completion: string;
+  cacheRead: string;
+  cacheCreation: string;
+};
+
 export type ProviderPriceDraft = {
   id?: number;
   provider: string;
@@ -31,6 +41,7 @@ export type ProviderPriceDraft = {
   windows: ProviderPriceWindowDraft[];
   /** Comma- or newline-separated `YYYY-MM-DD` dates. */
   offDays: string;
+  contextTiers: ProviderPriceContextTierDraft[];
 };
 
 export type ProviderPriceDraftError =
@@ -40,7 +51,9 @@ export type ProviderPriceDraftError =
   | 'timezone_required'
   | 'off_day_invalid'
   | 'window_time_invalid'
-  | 'window_multiplier_invalid';
+  | 'window_multiplier_invalid'
+  | 'context_tier_threshold_invalid'
+  | 'context_tier_duplicate';
 
 export type ProviderPriceGroup = {
   provider: string;
@@ -205,6 +218,7 @@ export const createEmptyProviderPriceDraft = (
   note: '',
   windows: [],
   offDays: '',
+  contextTiers: [],
 });
 
 export const createEmptyWindowDraft = (): ProviderPriceWindowDraft => ({
@@ -213,6 +227,14 @@ export const createEmptyWindowDraft = (): ProviderPriceWindowDraft => ({
   multiplier: '1',
   label: '',
   weekdays: [],
+});
+
+export const createEmptyContextTierDraft = (): ProviderPriceContextTierDraft => ({
+  threshold: '',
+  prompt: '',
+  completion: '',
+  cacheRead: '',
+  cacheCreation: '',
 });
 
 export const createProviderPriceDraft = (price: ProviderModelPrice): ProviderPriceDraft => ({
@@ -234,6 +256,13 @@ export const createProviderPriceDraft = (price: ProviderModelPrice): ProviderPri
     weekdays: normalizeWeekdays(window.weekdays),
   })),
   offDays: formatOffDaysDraft(price.offDays),
+  contextTiers: (price.contextTiers ?? []).map((tier) => ({
+    threshold: String(tier.thresholdTokens),
+    prompt: rateToDraft(tier.prompt),
+    completion: rateToDraft(tier.completion),
+    cacheRead: rateToDraft(tier.cacheRead, tier.cacheReadConfigured === true),
+    cacheCreation: rateToDraft(tier.cacheCreation, tier.cacheCreationConfigured === true),
+  })),
 });
 
 const parseRate = (value: string): number | null => {
@@ -292,6 +321,41 @@ export const buildProviderPriceFromDraft = (
     });
   }
 
+  const contextTiers: ProviderPriceContextTier[] = [];
+  for (const tier of draft.contextTiers) {
+    const thresholdTokens = Number(tier.threshold.trim());
+    if (!Number.isSafeInteger(thresholdTokens) || thresholdTokens <= 0) {
+      return { error: 'context_tier_threshold_invalid' };
+    }
+    if (contextTiers.some((existing) => existing.thresholdTokens === thresholdTokens)) {
+      return { error: 'context_tier_duplicate' };
+    }
+    const tierPrompt = parseRate(tier.prompt);
+    const tierCompletion = parseRate(tier.completion);
+    const tierCacheReadConfigured = tier.cacheRead.trim() !== '';
+    const tierCacheCreationConfigured = tier.cacheCreation.trim() !== '';
+    const tierCacheRead = tierCacheReadConfigured ? parseRate(tier.cacheRead) : 0;
+    const tierCacheCreation = tierCacheCreationConfigured ? parseRate(tier.cacheCreation) : 0;
+    if (
+      tierPrompt === null ||
+      tierCompletion === null ||
+      tierCacheRead === null ||
+      tierCacheCreation === null
+    ) {
+      return { error: 'rate_invalid' };
+    }
+    contextTiers.push({
+      thresholdTokens,
+      prompt: tierPrompt,
+      completion: tierCompletion,
+      cacheRead: tierCacheRead,
+      cacheCreation: tierCacheCreation,
+      cacheReadConfigured: tierCacheReadConfigured,
+      cacheCreationConfigured: tierCacheCreationConfigured,
+    });
+  }
+  contextTiers.sort((left, right) => left.thresholdTokens - right.thresholdTokens);
+
   const note = draft.note.trim();
   return {
     price: {
@@ -308,6 +372,7 @@ export const buildProviderPriceFromDraft = (
       ...(note ? { note } : {}),
       windows,
       ...(offDays.length ? { offDays } : {}),
+      ...(contextTiers.length ? { contextTiers } : {}),
     },
   };
 };

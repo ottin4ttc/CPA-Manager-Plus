@@ -121,3 +121,63 @@ func TestReplaceAllRejectsDuplicatesAndInvalidRules(t *testing.T) {
 		t.Fatalf("failed replace must not persist: %#v, %v", loaded, err)
 	}
 }
+
+func TestReplaceAllRewritesContextTiers(t *testing.T) {
+	ctx := context.Background()
+	repo := newRepository(t)
+	saved, err := repo.ReplaceAll(ctx, []model.ProviderModelPrice{{
+		Provider: "openai-compatible-baidu", Model: "A56S", Prompt: 18.72, Completion: 93.6,
+		ContextTiers: []model.ProviderPriceContextTier{
+			{ThresholdTokens: 500_000, Prompt: 50, Completion: 150},
+			{ThresholdTokens: 272_000, Prompt: 37.44, Completion: 140.4, CacheRead: 3.744, CacheReadConfigured: true},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	priceID := saved[0].ID
+
+	loaded, err := repo.LoadAll(ctx)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	tiers := loaded[0].ContextTiers
+	if len(tiers) != 2 || tiers[0].ThresholdTokens != 272_000 || tiers[1].ThresholdTokens != 500_000 {
+		t.Fatalf("loaded tiers = %#v", tiers)
+	}
+	if tiers[0].Prompt != 37.44 || tiers[0].Completion != 140.4 || !tiers[0].CacheReadConfigured || tiers[0].CacheRead != 3.744 || tiers[0].CacheCreationConfigured {
+		t.Fatalf("loaded first tier = %#v", tiers[0])
+	}
+
+	saved, err = repo.ReplaceAll(ctx, []model.ProviderModelPrice{{
+		Provider: "openai-compatible-baidu", Model: "A56S", Prompt: 18.72, Completion: 93.6,
+		ContextTiers: []model.ProviderPriceContextTier{{ThresholdTokens: 272_000, Prompt: 40, Completion: 150}},
+	}})
+	if err != nil {
+		t.Fatalf("second replace: %v", err)
+	}
+	if saved[0].ID != priceID {
+		t.Fatalf("existing provider/model must keep its id: %#v", saved)
+	}
+	loaded, err = repo.LoadAll(ctx)
+	if err != nil {
+		t.Fatalf("load after replace: %v", err)
+	}
+	if tiers := loaded[0].ContextTiers; len(tiers) != 1 || tiers[0].Prompt != 40 || tiers[0].CacheReadConfigured {
+		t.Fatalf("tiers should be rewritten: %#v", tiers)
+	}
+
+	if _, err := repo.ReplaceAll(ctx, []model.ProviderModelPrice{{
+		Provider: "openai-compatible-baidu", Model: "A56S", Prompt: 1,
+		ContextTiers: []model.ProviderPriceContextTier{{ThresholdTokens: 10, Prompt: 1}, {ThresholdTokens: 10, Prompt: 2}},
+	}}); err == nil || !strings.Contains(err.Error(), "duplicate threshold") {
+		t.Fatalf("duplicate threshold err = %v", err)
+	}
+	if _, err := repo.ReplaceAll(ctx, nil); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	loaded, err = repo.LoadAll(ctx)
+	if err != nil || len(loaded) != 0 {
+		t.Fatalf("clear result = %#v, %v", loaded, err)
+	}
+}

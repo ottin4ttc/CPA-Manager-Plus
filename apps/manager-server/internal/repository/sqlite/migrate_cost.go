@@ -55,6 +55,17 @@ func ensureUsageEventCostSchema(db *sql.DB) error {
 			weekdays text not null default ''
 		)`,
 		`create index if not exists idx_provider_model_price_windows_price on provider_model_price_windows(price_id)`,
+		`create table if not exists provider_model_price_context_tiers (
+			price_id integer not null references provider_model_prices(id) on delete cascade,
+			threshold_tokens integer not null,
+			prompt_per_1m real not null,
+			completion_per_1m real not null,
+			cache_read_per_1m real not null default 0,
+			cache_creation_per_1m real not null default 0,
+			cache_read_configured integer not null default 0,
+			cache_creation_configured integer not null default 0,
+			primary key (price_id, threshold_tokens)
+		)`,
 		`create table if not exists usage_event_costs_v1 (
 			event_id integer primary key,
 			cost_ts_ms integer not null,

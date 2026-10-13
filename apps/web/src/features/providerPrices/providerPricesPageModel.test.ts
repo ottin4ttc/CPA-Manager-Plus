@@ -206,9 +206,83 @@ describe('provider price drafts', () => {
         { id: 8, start: '00:00', end: '00:00', multiplier: '0.5', label: '', weekdays: [6, 7] },
       ],
       offDays: '2026-01-01, 2026-10-01',
+      contextTiers: [],
     });
 
     expect(buildProviderPriceFromDraft(draft)).toEqual({ price: deepseekChat });
+  });
+
+  it('round-trips context tiers sorted by threshold, omitting them when empty', () => {
+    const price: ProviderModelPrice = {
+      provider: 'openai-compatible-baidu',
+      model: 'A56S',
+      prompt: 18.72,
+      completion: 93.6,
+      cacheRead: 1.872,
+      cacheCreation: 23.4,
+      cacheReadConfigured: true,
+      cacheCreationConfigured: true,
+      timezone: 'Asia/Shanghai',
+      windows: [],
+      contextTiers: [
+        {
+          thresholdTokens: 272000,
+          prompt: 37.44,
+          completion: 140.4,
+          cacheRead: 3.744,
+          cacheCreation: 0,
+          cacheReadConfigured: true,
+          cacheCreationConfigured: false,
+        },
+      ],
+    };
+    const draft = createProviderPriceDraft(price);
+    expect(draft.contextTiers).toEqual([
+      {
+        threshold: '272000',
+        prompt: '37.44',
+        completion: '140.4',
+        cacheRead: '3.744',
+        cacheCreation: '',
+      },
+    ]);
+    expect(buildProviderPriceFromDraft(draft)).toEqual({ price });
+
+    const sorted = buildProviderPriceFromDraft({
+      ...draft,
+      contextTiers: [
+        { threshold: '500000', prompt: '50', completion: '150', cacheRead: '', cacheCreation: '' },
+        ...draft.contextTiers,
+      ],
+    });
+    expect(sorted.price?.contextTiers?.map((tier) => tier.thresholdTokens)).toEqual([
+      272000, 500000,
+    ]);
+    expect(buildProviderPriceFromDraft({ ...draft, contextTiers: [] }).price).not.toHaveProperty(
+      'contextTiers'
+    );
+  });
+
+  it('rejects invalid or duplicate context tier thresholds and rates', () => {
+    const base = { ...createEmptyProviderPriceDraft({ provider: 'p', model: 'm' }) };
+    const tier = {
+      threshold: '272000',
+      prompt: '1',
+      completion: '2',
+      cacheRead: '',
+      cacheCreation: '',
+    };
+    for (const threshold of ['', '0', '-1', '1.5', 'x']) {
+      expect(
+        buildProviderPriceFromDraft({ ...base, contextTiers: [{ ...tier, threshold }] }).error
+      ).toBe('context_tier_threshold_invalid');
+    }
+    expect(buildProviderPriceFromDraft({ ...base, contextTiers: [tier, tier] }).error).toBe(
+      'context_tier_duplicate'
+    );
+    expect(
+      buildProviderPriceFromDraft({ ...base, contextTiers: [{ ...tier, cacheRead: '-1' }] }).error
+    ).toBe('rate_invalid');
   });
 
   it('sorts and dedupes weekdays and off days, omitting them when empty', () => {

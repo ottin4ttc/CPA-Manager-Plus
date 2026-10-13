@@ -2176,6 +2176,12 @@
     "add_window": "新增時段",
     "remove_window": "刪除時段",
     "no_windows": "全天同價",
+    "context_tiers": "上下文分檔",
+    "context_tiers_hint": "請求總輸入（含快取）超過閾值時，整單改用該檔價格；恰好等於閾值仍按基礎價。",
+    "context_tier_threshold": "閾值（tokens）",
+    "add_context_tier": "新增分檔",
+    "remove_context_tier": "刪除分檔",
+    "no_context_tiers": "不分檔",
     "weekdays": "適用星期",
     "weekdays_every_day": "每天",
     "weekdays_workdays": "工作日",
@@ -2206,6 +2212,8 @@
     "validation_off_day_invalid": "例外日期格式應為 YYYY-MM-DD，且必須是有效日期",
     "validation_window_time_invalid": "時段時間格式應為 HH:MM",
     "validation_window_multiplier_invalid": "時段倍率必須大於 0",
+    "validation_context_tier_threshold_invalid": "分檔閾值必須是正整數",
+    "validation_context_tier_duplicate": "分檔閾值不能重複",
     "empty": "還沒有廠商價格規則"
   },
   "model_prices": {

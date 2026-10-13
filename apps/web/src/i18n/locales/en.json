@@ -2178,6 +2178,12 @@
     "add_window": "Add window",
     "remove_window": "Remove window",
     "no_windows": "Flat rate all day",
+    "context_tiers": "Context tiers",
+    "context_tiers_hint": "When total input (cache included) exceeds the threshold, the whole request uses that tier; exactly at the threshold stays on the base rate.",
+    "context_tier_threshold": "Threshold (tokens)",
+    "add_context_tier": "Add tier",
+    "remove_context_tier": "Remove tier",
+    "no_context_tiers": "No tiers",
     "weekdays": "Applies on",
     "weekdays_every_day": "Every day",
     "weekdays_workdays": "Weekdays",
@@ -2208,6 +2214,8 @@
     "validation_off_day_invalid": "Holiday dates must be real dates in the YYYY-MM-DD format",
     "validation_window_time_invalid": "Window times must use the HH:MM format",
     "validation_window_multiplier_invalid": "Window multipliers must be greater than 0",
+    "validation_context_tier_threshold_invalid": "Tier thresholds must be positive integers",
+    "validation_context_tier_duplicate": "Tier thresholds must be unique",
     "empty": "No provider price rules yet"
   },
   "model_prices": {

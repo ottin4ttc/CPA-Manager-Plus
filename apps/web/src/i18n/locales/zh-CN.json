@@ -2176,6 +2176,12 @@
     "add_window": "添加时段",
     "remove_window": "删除时段",
     "no_windows": "全天同价",
+    "context_tiers": "上下文分档",
+    "context_tiers_hint": "请求总输入（含缓存）超过阈值时，整单改用该档价格；恰好等于阈值仍按基础价。",
+    "context_tier_threshold": "阈值（tokens）",
+    "add_context_tier": "添加分档",
+    "remove_context_tier": "删除分档",
+    "no_context_tiers": "不分档",
     "weekdays": "适用星期",
     "weekdays_every_day": "每天",
     "weekdays_workdays": "工作日",
@@ -2206,6 +2212,8 @@
     "validation_off_day_invalid": "例外日期格式应为 YYYY-MM-DD，且必须是有效日期",
     "validation_window_time_invalid": "时段时间格式应为 HH:MM",
     "validation_window_multiplier_invalid": "时段倍率必须大于 0",
+    "validation_context_tier_threshold_invalid": "分档阈值必须是正整数",
+    "validation_context_tier_duplicate": "分档阈值不能重复",
     "empty": "还没有厂商价格规则"
   },
   "model_prices": {

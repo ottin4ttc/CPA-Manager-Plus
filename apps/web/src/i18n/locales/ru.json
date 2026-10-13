@@ -2179,6 +2179,12 @@
     "add_window": "Добавить окно",
     "remove_window": "Удалить окно",
     "no_windows": "Единая цена весь день",
+    "context_tiers": "Ступени контекста",
+    "context_tiers_hint": "Если общий ввод (включая кэш) превышает порог, весь запрос считается по этой ступени; ровно на пороге действует базовая цена.",
+    "context_tier_threshold": "Порог (токены)",
+    "add_context_tier": "Добавить ступень",
+    "remove_context_tier": "Удалить ступень",
+    "no_context_tiers": "Без ступеней",
     "weekdays": "Дни недели",
     "weekdays_every_day": "Ежедневно",
     "weekdays_workdays": "Будни",
@@ -2209,6 +2215,8 @@
     "validation_off_day_invalid": "Даты праздников должны быть реальными датами в формате YYYY-MM-DD",
     "validation_window_time_invalid": "Время окна должно быть в формате HH:MM",
     "validation_window_multiplier_invalid": "Множитель окна должен быть больше 0",
+    "validation_context_tier_threshold_invalid": "Порог ступени должен быть положительным целым числом",
+    "validation_context_tier_duplicate": "Пороги ступеней не должны повторяться",
     "empty": "Правил цен провайдеров пока нет"
   },
   "model_prices": {

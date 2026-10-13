@@ -191,3 +191,63 @@ func TestMatchWindowAtHonorsWeekdaysAndOffDays(t *testing.T) {
 		t.Fatal("ISO weekday mapping")
 	}
 }
+
+func TestNormalizeProviderModelPriceContextTiers(t *testing.T) {
+	price, err := NormalizeProviderModelPrice(ProviderModelPrice{
+		Provider: "p", Model: "m", Prompt: 1, Completion: 2,
+		ContextTiers: []ProviderPriceContextTier{
+			{ThresholdTokens: 500_000, Prompt: 4, Completion: 8, CacheRead: 9},
+			{ThresholdTokens: 272_000, Prompt: 2, Completion: 3, CacheRead: 0.2, CacheReadConfigured: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	if len(price.ContextTiers) != 2 || price.ContextTiers[0].ThresholdTokens != 272_000 || price.ContextTiers[1].ThresholdTokens != 500_000 {
+		t.Fatalf("tiers not sorted: %#v", price.ContextTiers)
+	}
+	if price.ContextTiers[1].CacheRead != 0 || price.ContextTiers[0].CacheRead != 0.2 {
+		t.Fatalf("unconfigured tier cache read should reset: %#v", price.ContextTiers)
+	}
+
+	cases := []struct {
+		name  string
+		tiers []ProviderPriceContextTier
+		want  string
+	}{
+		{"zero threshold", []ProviderPriceContextTier{{ThresholdTokens: 0, Prompt: 1}}, "must be positive"},
+		{"duplicate threshold", []ProviderPriceContextTier{{ThresholdTokens: 10, Prompt: 1}, {ThresholdTokens: 10, Prompt: 2}}, "duplicate threshold"},
+		{"negative price", []ProviderPriceContextTier{{ThresholdTokens: 10, Completion: -1}}, "invalid price"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NormalizeProviderModelPrice(ProviderModelPrice{Provider: "p", Model: "m", ContextTiers: tc.tiers})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestProviderModelPriceForContextSelectsHighestExceededTier(t *testing.T) {
+	price := ProviderModelPrice{
+		Prompt: 1, Completion: 5, CacheRead: 0.1, CacheReadConfigured: true,
+		ContextTiers: []ProviderPriceContextTier{
+			{ThresholdTokens: 100, Prompt: 2, Completion: 7.5},
+			{ThresholdTokens: 200, Prompt: 3, Completion: 9, CacheRead: 0.3, CacheReadConfigured: true},
+		},
+	}
+	if got := price.ForContext(100); got.Prompt != 1 || got.Completion != 5 || got.CacheRead != 0.1 {
+		t.Fatalf("exact threshold should stay in the base band: %#v", got)
+	}
+	mid := price.ForContext(101)
+	if mid.Prompt != 2 || mid.Completion != 7.5 || mid.CacheReadConfigured {
+		t.Fatalf("first tier should replace every base rate: %#v", mid)
+	}
+	if flat := mid.FlatPrice(); flat.CacheRead != 2 || flat.CacheCreation != 2 {
+		t.Fatalf("unconfigured tier cache rates should charge the tier prompt: %#v", flat)
+	}
+	if high := price.ForContext(201); high.Prompt != 3 || high.CacheRead != 0.3 || !high.CacheReadConfigured {
+		t.Fatalf("highest exceeded tier should win: %#v", high)
+	}
+}

@@ -155,3 +155,26 @@ func TestPriceEventAppliesWeekdayOnlyWindows(t *testing.T) {
 		t.Fatalf("off day should stay off-peak = %#v", holiday)
 	}
 }
+
+func TestPriceEventProviderRuleAppliesContextTiers(t *testing.T) {
+	rule := deepseekRule()
+	rule.ContextTiers = []model.ProviderPriceContextTier{
+		{ThresholdTokens: 1_000_000, Prompt: 4, Completion: 12, CacheRead: 0.4, CacheReadConfigured: true},
+	}
+	book := NewBook(nil, []model.ProviderModelPrice{rule})
+
+	// 1M normalized input sits exactly on the threshold, so the base rates apply.
+	base := book.PriceEvent(deepseekEvent(time.Date(2026, 9, 20, 4, 0, 0, 0, time.UTC)))
+	if base.CostCNYNanos != 1_900_000_000 {
+		t.Fatalf("base band cost = %#v, want 1.9 CNY", base)
+	}
+
+	event := deepseekEvent(time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC))
+	normalized := int64(1_000_001)
+	event.NormalizedTotalInputTokens = &normalized
+	// prompt 500,001*4 + cache read 500k*0.4 + output 100k*12 = 3.400004 CNY, halved by the off-peak window.
+	long := book.PriceEvent(event)
+	if long.PriceSource != PriceSourceProvider || long.CostCNYNanos != 1_700_002_000 || long.WindowID != 3 {
+		t.Fatalf("long-context cost = %#v, want 1.700002 CNY in the off-peak window", long)
+	}
+}
