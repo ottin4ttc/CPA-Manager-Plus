@@ -12,6 +12,7 @@ import (
 	accountactionsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/accountaction"
 	adminauthsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/adminauth"
 	apikeyaliassvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/apikeyalias"
+	apikeygroupsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/apikeygroup"
 	automationsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/automation"
 	bootstrapsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/bootstrap"
 	codexinspectionsvc "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/codexinspection"
@@ -59,6 +60,7 @@ type Context struct {
 	ModelPriceService              *modelpricesvc.Service
 	ProviderPriceService           *providerpricesvc.Service
 	APIKeyAliasService             *apikeyaliassvc.Service
+	APIKeyGroupService             *apikeygroupsvc.Service
 	AccountActionService           *accountactionsvc.Service
 	AccountProcessingPolicyService *automationsvc.Service
 	AuthFileMutationCoordinator    *cpaauthfiles.MutationCoordinator
@@ -172,6 +174,7 @@ func fromExisting(
 		ModelPriceService:    modelpricesvc.NewMultiSourceWithModelsDev(st, modelsDevModelPriceSyncURL, modelPriceSyncURL, openRouterModelPriceSyncURL, managerConfigService),
 		ProviderPriceService: providerpricesvc.New(st),
 		APIKeyAliasService:   apikeyaliassvc.New(st),
+		APIKeyGroupService:   apikeygroupsvc.New(st),
 		AccountActionService: accountactionsvc.NewWithMutationCoordinator(
 			st,
 			managerConfigService,

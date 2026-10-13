@@ -7,6 +7,7 @@ import (
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/app"
 	accountactioncontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/accountaction"
 	apikeyaliascontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/apikeyalias"
+	apikeygroupcontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/apikeygroup"
 	automationcontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/automation"
 	codexinspectioncontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/codexinspection"
 	dashboardcontroller "github.com/seakee/cpa-manager-plus/apps/manager-server/internal/http/controller/dashboard"
@@ -36,6 +37,7 @@ func New(appCtx *app.Context) http.Handler {
 	modelPriceHandler := &modelpricecontroller.Handler{App: appCtx}
 	providerPriceHandler := &providerpricecontroller.Handler{App: appCtx}
 	apiKeyAliasHandler := &apikeyaliascontroller.Handler{App: appCtx}
+	apiKeyGroupHandler := &apikeygroupcontroller.Handler{App: appCtx}
 	accountActionHandler := &accountactioncontroller.Handler{App: appCtx}
 	automationHandler := automationcontroller.New(appCtx)
 	quotaCooldownHandler := &quotacooldowncontroller.Handler{App: appCtx}
@@ -56,7 +58,7 @@ func New(appCtx *app.Context) http.Handler {
 	mux.HandleFunc("/usage-service/quota-cooldowns", middleware.WithCORS(appCtx.Config, quotaCooldownHandler.Handle))
 	mux.HandleFunc("/setup", middleware.WithCORS(appCtx.Config, setupHandler.Setup))
 	mux.HandleFunc("/management.html", panelHandler.ManagementHTML)
-	mux.HandleFunc("/", rootHandler(appCtx, usageHandler, modelPriceHandler, providerPriceHandler, apiKeyAliasHandler, accountActionHandler, codexInspectionHandler, dashboardHandler, monitoringHandler, errorInsightHandler, quotaSnapshotHandler, proxyHandler))
+	mux.HandleFunc("/", rootHandler(appCtx, usageHandler, modelPriceHandler, providerPriceHandler, apiKeyAliasHandler, apiKeyGroupHandler, accountActionHandler, codexInspectionHandler, dashboardHandler, monitoringHandler, errorInsightHandler, quotaSnapshotHandler, proxyHandler))
 
 	return middleware.Recovery(middleware.RequestLogger(mux))
 }
@@ -67,6 +69,7 @@ func rootHandler(
 	modelPriceHandler *modelpricecontroller.Handler,
 	providerPriceHandler *providerpricecontroller.Handler,
 	apiKeyAliasHandler *apikeyaliascontroller.Handler,
+	apiKeyGroupHandler *apikeygroupcontroller.Handler,
 	accountActionHandler *accountactioncontroller.Handler,
 	codexInspectionHandler *codexinspectioncontroller.Handler,
 	dashboardHandler *dashboardcontroller.Handler,
@@ -91,6 +94,10 @@ func rootHandler(
 		}
 		if strings.HasPrefix(r.URL.Path, "/v0/management/api-key-aliases") {
 			middleware.WithCORS(appCtx.Config, apiKeyAliasHandler.Handle)(w, r)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, apikeygroupcontroller.Path) {
+			middleware.WithCORS(appCtx.Config, apiKeyGroupHandler.Handle)(w, r)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/v0/management/account-action-candidates") {
