@@ -21,6 +21,17 @@ vi.mock('@/features/monitoring/services/monitoringMetaService', () => ({
   loadMonitoringMetaPayload: () => Promise.resolve({ authFiles: [], channels: [] }),
 }));
 
+vi.mock('@/features/apiKeyGroups/hooks/useApiKeyGroups', () => ({
+  useApiKeyGroups: () => ({
+    available: false,
+    loading: false,
+    groups: [],
+    error: '',
+    save: vi.fn(),
+    reload: vi.fn(),
+  }),
+}));
+
 vi.mock('@/stores', () => ({
   useConfigStore: (selector: (state: { config: null }) => unknown) => selector({ config: null }),
 }));

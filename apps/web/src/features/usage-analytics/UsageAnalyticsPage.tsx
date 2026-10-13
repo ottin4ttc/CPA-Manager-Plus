@@ -103,6 +103,10 @@ import {
   providerSupportsBuckets,
   UNTAGGED_BUCKET_FILTER,
 } from '@/features/authFiles/bucketOptions';
+import {
+  buildApiKeyGroupOptions,
+  filterApiKeyOptionsByGroup,
+} from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import { formatCostPair } from '@/utils/usage';
 import styles from './UsageAnalyticsPage.module.scss';
 
@@ -2553,27 +2557,48 @@ function UsageAnalyticsPageInner() {
     [allModelOptionLabel, displayOptionCache.models, usage.filters.model]
   );
   const apiKeyOptions = useMemo<SelectOption[]>(
-    () => [
-      { value: 'all', label: allApiKeyOptionLabel },
-      ...mergeSelectOptions(
+    () =>
+      filterApiKeyOptionsByGroup(
         [
-          ...displayOptionCache.apiKeys,
-          usage.filters.apiKeyHash !== 'all'
-            ? {
-                value: usage.filters.apiKeyHash,
-                label: resolveUsageApiKeyLabel(usage.filters.apiKeyHash, usage.apiKeyDisplayMap),
-              }
-            : null,
-        ].filter((option): option is SelectOption => Boolean(option?.value))
+          { value: 'all', label: allApiKeyOptionLabel },
+          ...mergeSelectOptions(
+            [
+              ...displayOptionCache.apiKeys,
+              usage.filters.apiKeyHash !== 'all'
+                ? {
+                    value: usage.filters.apiKeyHash,
+                    label: resolveUsageApiKeyLabel(
+                      usage.filters.apiKeyHash,
+                      usage.apiKeyDisplayMap
+                    ),
+                  }
+                : null,
+            ].filter((option): option is SelectOption => Boolean(option?.value))
+          ),
+        ],
+        usage.apiKeyGroupHashes,
+        usage.filters.apiKeyHash
       ),
-    ],
     [
       allApiKeyOptionLabel,
       displayOptionCache.apiKeys,
       usage.apiKeyDisplayMap,
+      usage.apiKeyGroupHashes,
       usage.filters.apiKeyHash,
     ]
   );
+  const apiKeyGroupOptions = useMemo<SelectOption[]>(
+    () =>
+      buildApiKeyGroupOptions(
+        usage.apiKeyGroups.groups,
+        usage.filters.apiKeyGroup,
+        t('api_key_groups.filter_all')
+      ),
+    [t, usage.apiKeyGroups.groups, usage.filters.apiKeyGroup]
+  );
+  const showApiKeyGroupFilter =
+    usage.apiKeyGroups.available &&
+    (usage.apiKeyGroups.groups.length > 0 || usage.filters.apiKeyGroup !== 'all');
   const providerOptions = useMemo<SelectOption[]>(
     () =>
       buildStableSelectOptions(
@@ -2902,13 +2927,25 @@ function UsageAnalyticsPageInner() {
                 onChange={(model) => updateFilters({ model })}
                 ariaLabel={t('usage_analytics.filter_model')}
                 triggerClassName={styles.filterSelectTrigger}
+                searchable
               />
+              {showApiKeyGroupFilter ? (
+                <Select
+                  value={usage.filters.apiKeyGroup}
+                  options={apiKeyGroupOptions}
+                  onChange={(apiKeyGroup) => updateFilters({ apiKeyGroup })}
+                  ariaLabel={t('api_key_groups.filter_label')}
+                  triggerClassName={styles.filterSelectTrigger}
+                  searchable
+                />
+              ) : null}
               <Select
                 value={usage.filters.apiKeyHash}
                 options={apiKeyOptions}
                 onChange={(apiKeyHash) => updateFilters({ apiKeyHash })}
                 ariaLabel={t('usage_analytics.filter_api_key')}
                 triggerClassName={styles.filterSelectTrigger}
+                searchable
               />
               <Select
                 value={usage.filters.provider}
@@ -2916,6 +2953,7 @@ function UsageAnalyticsPageInner() {
                 onChange={(provider) => updateFilters({ provider })}
                 ariaLabel={t('usage_analytics.filter_provider')}
                 triggerClassName={styles.filterSelectTrigger}
+                searchable
               />
               {providerSupportsBuckets(usage.filters.provider) ? (
                 <Select
@@ -2924,6 +2962,7 @@ function UsageAnalyticsPageInner() {
                   onChange={(bucket) => updateFilters({ bucket })}
                   ariaLabel={t('usage_analytics.filter_bucket')}
                   triggerClassName={styles.filterSelectTrigger}
+                  searchable
                 />
               ) : null}
               <Select
@@ -2967,6 +3006,7 @@ function UsageAnalyticsPageInner() {
                     options={authFileOptions}
                     onChange={(authFile) => updateFilters({ authFile })}
                     ariaLabel={t('usage_analytics.filter_auth_file')}
+                    searchable
                   />
                 </label>
                 <label className={styles.filterGroup}>

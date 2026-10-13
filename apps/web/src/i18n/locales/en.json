@@ -4687,5 +4687,9 @@
     "env_locked_hint": "This switch is locked by the service startup environment. Update the environment variable and restart to change it.",
     "env_locked_reason": "Locked by the {{envKey}} environment variable. Update it and restart the service to change this switch.",
     "gating_note": "Disabling a switch only affects new problems found later. Tasks already queued or in progress will continue to finish."
+  },
+  "api_key_groups": {
+    "filter_all": "All reporting groups",
+    "filter_label": "Reporting group"
   }
 }

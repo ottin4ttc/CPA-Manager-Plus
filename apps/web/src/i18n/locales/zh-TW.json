@@ -4685,5 +4685,9 @@
     "env_locked_hint": "此開關由服務啟動環境鎖定，請修改環境變數並重新啟動。",
     "env_locked_reason": "由環境變數 {{envKey}} 鎖定。修改該變數並重新啟動服務後才能變更此開關。",
     "gating_note": "關閉某項策略只會影響之後發現的新問題；已經排隊或正在處理的任務會繼續完成。"
+  },
+  "api_key_groups": {
+    "filter_all": "全部統計分組",
+    "filter_label": "統計分組"
   }
 }

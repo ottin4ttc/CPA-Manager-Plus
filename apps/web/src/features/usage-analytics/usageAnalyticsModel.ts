@@ -24,6 +24,7 @@ import {
 import { buildMonitoringSourceDisplay } from '@/features/monitoring/model/sourceDisplay';
 import type { MonitoringAuthMeta, MonitoringChannelMeta } from '@/features/monitoring/model/types';
 import { UNTAGGED_BUCKET_FILTER } from '@/features/authFiles/bucketOptions';
+import { buildApiKeyHashFilter } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import {
@@ -74,6 +75,8 @@ export type UsageAnalyticsFiltersState = {
   granularity: UsageAnalyticsGranularity;
   model: string;
   apiKeyHash: string;
+  // Reporting group name ('all' = none); expanded to API key hashes on request.
+  apiKeyGroup: string;
   provider: string;
   authFile: string;
   bucket: string;
@@ -500,6 +503,7 @@ export const USAGE_ANALYTICS_DEFAULT_FILTERS: UsageAnalyticsFiltersState = {
   granularity: 'auto',
   model: 'all',
   apiKeyHash: 'all',
+  apiKeyGroup: 'all',
   provider: 'all',
   authFile: 'all',
   bucket: 'all',
@@ -734,7 +738,10 @@ export const buildUsageAnalyticsFilters = (
       | 'bucket'
     >
   >,
-  authMetaMap: Map<string, MonitoringAuthMeta>
+  authMetaMap: Map<string, MonitoringAuthMeta>,
+  // Member hashes of the selected reporting group (resolveApiKeyGroupHashes);
+  // null when no group is selected.
+  apiKeyGroupHashes: string[] | null = null
 ): MonitoringAnalyticsFilters => {
   const payload: MonitoringAnalyticsFilters = {};
   const model = filters.model ?? 'all';
@@ -744,8 +751,9 @@ export const buildUsageAnalyticsFilters = (
   if (isActiveSelectValue(model)) {
     payload.models = [model.trim()];
   }
-  if (isActiveSelectValue(apiKeyHash)) {
-    payload.api_key_hashes = [normalizeLowerSelectValue(apiKeyHash)];
+  const apiKeyHashes = buildApiKeyHashFilter(apiKeyHash, apiKeyGroupHashes);
+  if (apiKeyHashes) {
+    payload.api_key_hashes = apiKeyHashes;
   }
   if (isActiveSelectValue(provider)) {
     payload.providers = [normalizeLowerSelectValue(provider)];
@@ -2766,6 +2774,7 @@ export const buildMonitoringDetailUrl = (
       UsageAnalyticsFiltersState,
       | 'model'
       | 'apiKeyHash'
+      | 'apiKeyGroup'
       | 'provider'
       | 'authFile'
       | 'bucket'
@@ -2794,6 +2803,9 @@ export const buildMonitoringDetailUrl = (
   }
   if (isActiveSelectValue(apiKeyHash)) {
     params.set('api_key_hash', normalizeLowerSelectValue(apiKeyHash));
+  }
+  if (isActiveSelectValue(filters.apiKeyGroup)) {
+    params.set('api_key_group', filters.apiKeyGroup!.trim());
   }
   if (isActiveSelectValue(provider)) {
     params.set('provider', normalizeLowerSelectValue(provider));

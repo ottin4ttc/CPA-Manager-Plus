@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MonitoringAnalyticsResponse } from '@/services/api/usageService';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import type { MonitoringAuthMeta } from '@/features/monitoring/model/types';
+import { NO_MATCHING_API_KEY_HASH } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import { UNTAGGED_BUCKET_FILTER } from '@/features/authFiles/bucketOptions';
 import type { UsageRankRow } from './usageAnalyticsModel';
 import {
@@ -1855,6 +1856,44 @@ describe('usage analytics bucket filter', () => {
   it('carries bucket into the drill-down url', () => {
     const url = buildMonitoringDetailUrl({ bucketMs: 0, bucketEndMs: 1000 }, { bucket: 'anon' });
     expect(url).toContain('bucket=anon');
+  });
+});
+
+describe('usage analytics reporting group filter', () => {
+  const authMetaMap = new Map<string, MonitoringAuthMeta>();
+  const h1 = '1'.repeat(64);
+  const h2 = '2'.repeat(64);
+  const h3 = '3'.repeat(64);
+
+  it('leaves api_key_hashes unset without a group or key', () => {
+    expect(buildUsageAnalyticsFilters({}, authMetaMap, null).api_key_hashes).toBeUndefined();
+  });
+
+  it('expands the selected group into its member hashes', () => {
+    expect(buildUsageAnalyticsFilters({}, authMetaMap, [h2, h1]).api_key_hashes).toEqual([h1, h2]);
+  });
+
+  it('intersects the group with a single API key selection', () => {
+    expect(
+      buildUsageAnalyticsFilters({ apiKeyHash: h1 }, authMetaMap, [h1, h2]).api_key_hashes
+    ).toEqual([h1]);
+    expect(
+      buildUsageAnalyticsFilters({ apiKeyHash: h3 }, authMetaMap, [h1, h2]).api_key_hashes
+    ).toEqual([NO_MATCHING_API_KEY_HASH]);
+  });
+
+  it('matches nothing for an empty group instead of dropping the filter', () => {
+    expect(buildUsageAnalyticsFilters({}, authMetaMap, []).api_key_hashes).toEqual([
+      NO_MATCHING_API_KEY_HASH,
+    ]);
+  });
+
+  it('carries the group into the drill-down url', () => {
+    const url = buildMonitoringDetailUrl(
+      { bucketMs: 0, bucketEndMs: 1000 },
+      { apiKeyGroup: '业务线/小麦' }
+    );
+    expect(new URL(url, 'http://x').searchParams.get('api_key_group')).toBe('业务线/小麦');
   });
 });
 

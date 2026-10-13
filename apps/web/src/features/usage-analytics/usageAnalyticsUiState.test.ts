@@ -245,6 +245,23 @@ describe('usageAnalyticsUiState', () => {
     ).toBe('team-a');
   });
 
+  it('round-trips the reporting group through the URL', () => {
+    const params = buildUsageAnalyticsSearchParams({
+      activeTab: 'apiKeys',
+      filters: { ...USAGE_ANALYTICS_DEFAULT_FILTERS, apiKeyGroup: '业务线/小麦' },
+    });
+    expect(params.get('api_key_group')).toBe('业务线/小麦');
+    expect(buildUsageAnalyticsUiStateFromSearchParams(params).filters.apiKeyGroup).toBe(
+      '业务线/小麦'
+    );
+    expect(
+      buildUsageAnalyticsSearchParams({
+        activeTab: 'overview',
+        filters: USAGE_ANALYTICS_DEFAULT_FILTERS,
+      }).has('api_key_group')
+    ).toBe(false);
+  });
+
   it('leaves the bucket out of the URL for a non-codex provider', () => {
     const params = buildUsageAnalyticsSearchParams({
       activeTab: 'overview',

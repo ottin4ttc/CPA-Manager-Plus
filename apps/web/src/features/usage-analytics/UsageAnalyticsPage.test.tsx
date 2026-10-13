@@ -220,6 +220,16 @@ const createUsageState = (overrides: Record<string, unknown> = {}) => {
     timeline: [point],
     modelRows: [modelRow],
     apiKeyRows: [apiKeyRow],
+    apiKeyGroups: {
+      available: false,
+      loading: false,
+      groups: [],
+      error: '',
+      save: vi.fn(),
+      reload: vi.fn(),
+    },
+    apiKeyGroupHashes: null,
+    apiKeyGroupStatRows: [],
     credentialRows: [credentialRow],
     allCredentialRows: [credentialRow],
     providerRows: [

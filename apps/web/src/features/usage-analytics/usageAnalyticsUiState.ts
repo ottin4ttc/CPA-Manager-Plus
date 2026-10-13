@@ -114,6 +114,7 @@ export const normalizeUsageAnalyticsFilters = (value: unknown): UsageAnalyticsFi
     granularity: normalizeGranularity(record.granularity),
     model: normalizeSelectValue(record.model),
     apiKeyHash: normalizeSelectValue(record.apiKeyHash),
+    apiKeyGroup: normalizeSelectValue(record.apiKeyGroup),
     provider: normalizeSelectValue(record.provider),
     authFile: normalizeSelectValue(record.authFile),
     bucket: normalizeSelectValue(record.bucket),
@@ -166,6 +167,7 @@ const queryHasAnyFilter = (params: URLSearchParams) =>
     'granularity',
     'model',
     'api_key_hash',
+    'api_key_group',
     'provider',
     'auth_file',
     'bucket',
@@ -207,6 +209,7 @@ export const buildUsageAnalyticsUiStateFromSearchParams = (
   if (params.has('granularity')) record.granularity = params.get('granularity');
   if (params.has('model')) record.model = params.get('model');
   if (params.has('api_key_hash')) record.apiKeyHash = params.get('api_key_hash');
+  if (params.has('api_key_group')) record.apiKeyGroup = params.get('api_key_group');
   if (params.has('provider')) record.provider = params.get('provider');
   if (params.has('auth_file')) record.authFile = params.get('auth_file');
   if (params.has('bucket')) record.bucket = params.get('bucket');
@@ -253,6 +256,7 @@ export const buildUsageAnalyticsSearchParams = (state: UsageAnalyticsUiState) =>
   }
   setNonDefaultParam(params, 'model', filters.model, defaults.model);
   setNonDefaultParam(params, 'api_key_hash', filters.apiKeyHash, defaults.apiKeyHash);
+  setNonDefaultParam(params, 'api_key_group', filters.apiKeyGroup, defaults.apiKeyGroup);
   setNonDefaultParam(params, 'provider', filters.provider, defaults.provider);
   setNonDefaultParam(params, 'auth_file', filters.authFile, defaults.authFile);
   setNonDefaultParam(params, 'bucket', filters.bucket, defaults.bucket);

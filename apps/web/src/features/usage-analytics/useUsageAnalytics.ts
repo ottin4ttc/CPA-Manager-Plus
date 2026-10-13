@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { scopeBucketFilterToProvider } from '@/features/authFiles/bucketOptions';
+import { resolveApiKeyGroupHashes } from '@/features/apiKeyGroups/apiKeyGroupFilter';
+import { buildApiKeyGroupStatRows } from '@/features/apiKeyGroups/apiKeyGroupStats';
+import { useApiKeyGroups } from '@/features/apiKeyGroups/hooks/useApiKeyGroups';
 import { useMonitoringAnalytics } from '@/features/monitoring/hooks/useMonitoringAnalytics';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
 import { buildApiKeyDisplayMap } from '@/features/monitoring/model/apiKeys';
@@ -94,6 +97,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 export function useUsageAnalytics() {
   const config = useConfigStore((state) => state.config);
   const { apiKeyAliases, loadApiKeyAliases } = useUsageData({ loadUsageEvents: false });
+  const apiKeyGroups = useApiKeyGroups();
   const [monitoringMeta, setMonitoringMeta] = useState<UsageAnalyticsMonitoringMeta>(
     EMPTY_USAGE_ANALYTICS_MONITORING_META
   );
@@ -235,9 +239,16 @@ export function useUsageAnalytics() {
     () => resolveUsageGranularity(filters, nowMs),
     [filters, nowMs]
   );
+  const apiKeyGroupHashes = useMemo(
+    () => resolveApiKeyGroupHashes(apiKeyGroups.groups, filters.apiKeyGroup),
+    [apiKeyGroups.groups, filters.apiKeyGroup]
+  );
+  // A selected group reads as empty until the group list arrives, so hold the
+  // scoped requests instead of flashing a "no data" result.
+  const waitingForApiKeyGroups = apiKeyGroupHashes !== null && apiKeyGroups.loading;
   const analyticsFilters = useMemo(
-    () => buildUsageAnalyticsFilters(filters, authMetaMap),
-    [authMetaMap, filters]
+    () => buildUsageAnalyticsFilters(filters, authMetaMap, apiKeyGroupHashes),
+    [apiKeyGroupHashes, authMetaMap, filters]
   );
 
   useEffect(() => {
@@ -282,7 +293,7 @@ export function useUsageAnalytics() {
   );
 
   const analytics = useMonitoringAnalytics({
-    fromMs: bounds?.fromMs,
+    fromMs: waitingForApiKeyGroups ? undefined : bounds?.fromMs,
     toMs: bounds?.toMs,
     nowMs,
     dataScopeKey,
@@ -334,7 +345,7 @@ export function useUsageAnalytics() {
     [analyticsFilters, debouncedSearchQuery, selectedHeatmapDate]
   );
   const heatmapDateAnalytics = useMonitoringAnalytics({
-    fromMs: selectedHeatmapDate?.fromMs,
+    fromMs: waitingForApiKeyGroups ? undefined : selectedHeatmapDate?.fromMs,
     toMs: selectedHeatmapDate?.toMs,
     nowMs,
     dataScopeKey: heatmapDateDataScopeKey,
@@ -364,6 +375,17 @@ export function useUsageAnalytics() {
       filters.apiKeyKeyword,
       resolvedGranularity,
     ]
+  );
+  // Built from the raw stats, not adapted.apiKeyRows, so the API key keyword
+  // search never changes group totals.
+  const apiKeyGroupStatRows = useMemo(
+    () =>
+      buildApiKeyGroupStatRows(
+        analyticsData?.api_key_stats ?? [],
+        apiKeyGroups.groups,
+        adapted.summary
+      ),
+    [adapted.summary, analyticsData, apiKeyGroups.groups]
   );
   const apiKeyTrendHashes = useMemo(() => {
     if (activeTabState !== 'overview' && activeTabState !== 'trends') return [];
@@ -500,10 +522,11 @@ export function useUsageAnalytics() {
       selectedApiKeyFilterHash
         ? buildUsageAnalyticsFilters(
             { ...filters, apiKeyHash: selectedApiKeyFilterHash },
-            authMetaMap
+            authMetaMap,
+            apiKeyGroupHashes
           )
         : {},
-    [authMetaMap, filters, selectedApiKeyFilterHash]
+    [apiKeyGroupHashes, authMetaMap, filters, selectedApiKeyFilterHash]
   );
   const selectedApiKeyTimelineInclude = useMemo(
     () => ({
@@ -758,7 +781,7 @@ export function useUsageAnalytics() {
     setActiveTab,
     bounds,
     resolvedGranularity,
-    loading: analytics.loading,
+    loading: analytics.loading || waitingForApiKeyGroups,
     error: analytics.error,
     enabled: analytics.enabled,
     apiKeyDisplayMap,
@@ -771,6 +794,9 @@ export function useUsageAnalytics() {
     timeline: adapted.timeline,
     modelRows: adapted.modelRows,
     apiKeyRows: adapted.apiKeyRows,
+    apiKeyGroups,
+    apiKeyGroupHashes,
+    apiKeyGroupStatRows,
     credentialRows: adapted.credentialRows,
     allCredentialRows: adapted.credentialRows,
     providerRows: adapted.providerRows,
