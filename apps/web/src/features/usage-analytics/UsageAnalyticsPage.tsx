@@ -2598,7 +2598,8 @@ function UsageAnalyticsPageInner() {
       buildApiKeyGroupOptions(
         usage.apiKeyGroups.groups,
         usage.filters.apiKeyGroup,
-        t('api_key_groups.filter_all')
+        t('api_key_groups.filter_all'),
+        t('api_key_groups.ungrouped_row')
       ),
     [t, usage.apiKeyGroups.groups, usage.filters.apiKeyGroup]
   );
@@ -3884,8 +3885,8 @@ function ApiKeyGroupStatsPanel({
                 return (
                   <tr
                     key={row.id}
-                    className={!ungrouped && row.id === selectedGroup ? styles.selectedRow : ''}
-                    onClick={ungrouped ? undefined : () => onSelectGroup(row.id)}
+                    className={row.id === selectedGroup ? styles.selectedRow : ''}
+                    onClick={() => onSelectGroup(row.id)}
                   >
                     <td>
                       <span className={styles.entityCell}>

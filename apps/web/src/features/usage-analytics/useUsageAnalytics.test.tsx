@@ -21,11 +21,15 @@ vi.mock('@/features/monitoring/services/monitoringMetaService', () => ({
   loadMonitoringMetaPayload: () => Promise.resolve({ authFiles: [], channels: [] }),
 }));
 
+const apiKeyGroupsState = vi.hoisted(() => ({
+  groups: [] as Array<{ name: string; apiKeyHashes: string[] }>,
+}));
+
 vi.mock('@/features/apiKeyGroups/hooks/useApiKeyGroups', () => ({
   useApiKeyGroups: () => ({
-    available: false,
+    available: apiKeyGroupsState.groups.length > 0,
     loading: false,
-    groups: [],
+    groups: apiKeyGroupsState.groups,
     error: '',
     save: vi.fn(),
     reload: vi.fn(),
@@ -49,6 +53,7 @@ describe('useUsageAnalytics request orchestration', () => {
   let renderer: ReactTestRenderer | null = null;
   let latestResult: ReturnType<typeof useUsageAnalytics> | null = null;
   let selectorError = '';
+  let selectorPending = false;
   let credentialTimelineError = '';
   let credentialTimelineLoading = false;
   const mainRefresh = vi.fn();
@@ -130,7 +135,7 @@ describe('useUsageAnalytics request orchestration', () => {
       loading: credentialTimeline ? credentialTimelineLoading : false,
       error: selectors ? selectorError : credentialTimeline ? credentialTimelineError : '',
       data: selectors
-        ? selectorError
+        ? selectorError || selectorPending
           ? null
           : {
               ...emptyAnalyticsResponse,
@@ -204,6 +209,8 @@ describe('useUsageAnalytics request orchestration', () => {
 
   beforeEach(() => {
     selectorError = '';
+    selectorPending = false;
+    apiKeyGroupsState.groups = [];
     credentialTimelineError = '';
     credentialTimelineLoading = false;
     latestResult = null;
@@ -219,16 +226,44 @@ describe('useUsageAnalytics request orchestration', () => {
     renderer = null;
   });
 
-  const renderHook = async () => {
+  const renderHook = async (entry = '/usage-analytics') => {
     await act(async () => {
       renderer = create(
-        <MemoryRouter initialEntries={['/usage-analytics']}>
+        <MemoryRouter initialEntries={[entry]}>
           <Harness />
         </MemoryRouter>
       );
       await Promise.resolve();
     });
   };
+
+  it('expands "ungrouped" into the range keys that no group contains', async () => {
+    apiKeyGroupsState.groups = [{ name: 'g', apiKeyHashes: ['key-b'] }];
+    await renderHook('/usage-analytics?api_key_group=__ungrouped__');
+
+    const main = lastParams((params) => Boolean(params.include?.summary));
+    expect(main?.fromMs).toBeDefined();
+    expect(main?.filters?.api_key_hashes).toEqual(['key-a']);
+  });
+
+  it('holds the main request for "ungrouped" until the range keys arrive', async () => {
+    apiKeyGroupsState.groups = [{ name: 'g', apiKeyHashes: ['key-b'] }];
+    selectorPending = true;
+    await renderHook('/usage-analytics?api_key_group=__ungrouped__');
+
+    expect(lastParams((params) => Boolean(params.include?.summary))?.fromMs).toBeUndefined();
+    expect(latestResult?.loading).toBe(true);
+  });
+
+  it('matches nothing for "ungrouped" when the range key list fails to load', async () => {
+    apiKeyGroupsState.groups = [{ name: 'g', apiKeyHashes: ['key-b'] }];
+    selectorError = 'boom';
+    await renderHook('/usage-analytics?api_key_group=__ungrouped__');
+
+    const main = lastParams((params) => Boolean(params.include?.summary));
+    expect(main?.fromMs).toBeDefined();
+    expect(main?.filters?.api_key_hashes).toEqual(['__no_matching_api_key_hash__']);
+  });
 
   it('uses a tab-scoped main request and a tab-independent selector request', async () => {
     await renderHook();

@@ -4708,7 +4708,7 @@
     "error_name_empty": "Введите название группы",
     "error_name_too_long": "Не более {{max}} символов",
     "error_name_duplicate": "Группа с таким названием уже есть (без учёта регистра)",
-    "error_name_reserved": "Название «all» зарезервировано",
+    "error_name_reserved": "Это название зарезервировано",
     "delete": "Удалить группу",
     "delete_confirm": "Удалить группу? Ключи и маршрутизация не изменятся.",
     "key_search_placeholder": "Поиск API-ключей",

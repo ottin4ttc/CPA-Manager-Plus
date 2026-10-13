@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MonitoringAnalyticsEventRow } from '@/services/api/usageService';
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
+import { collectKnownApiKeyHashes } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import { buildSourceInfoMap } from '@/utils/sourceResolver';
 import { collectUsageDetailsWithEndpoint, normalizeAuthIndex } from '@/utils/usage';
 import { readString } from '../model/base';
@@ -469,9 +470,53 @@ export function useMonitoringData({
     return buildApiKeyDisplayMap(config?.apiKeys || [], apiKeyAliases || []);
   }, [apiKeyAliases, config?.apiKeys]);
 
+  const filterSelectorsInclude = useMemo(() => buildMonitoringFilterSelectorsInclude(), []);
+  const filterSelectorsScopeKey = useMemo(
+    () =>
+      buildMonitoringFilterSelectorsScopeKey(
+        timeRange,
+        analyticsBounds,
+        searchQuery,
+        searchApiKeyHash
+      ),
+    [analyticsBounds, searchApiKeyHash, searchQuery, timeRange]
+  );
+  const filterSelectorsAnalytics = useMonitoringAnalytics({
+    fromMs: analyticsBounds?.startMs,
+    toMs: analyticsBounds?.endMs,
+    nowMs: analyticsNowMs,
+    dataScopeKey: filterSelectorsScopeKey,
+    searchQuery,
+    searchApiKeyHash,
+    include: filterSelectorsInclude,
+    throttleMs: 1_000,
+  });
+  // "Ungrouped" arrives as the set of grouped hashes and resolves against the
+  // keys the filter-selector request (independent of the scope) saw in range.
+  const filterSelectorsOptions = filterSelectorsAnalytics.dataStale
+    ? null
+    : (filterSelectorsAnalytics.data?.filter_options ?? null);
+  const resolvedScopeFilters = useMemo(() => {
+    if (!scopeFilters?.apiKeyGroupExcludedHashes) return scopeFilters;
+    const excluded = new Set(
+      scopeFilters.apiKeyGroupExcludedHashes.map((hash) => hash.trim().toLowerCase())
+    );
+    return {
+      ...scopeFilters,
+      apiKeyGroupHashes: collectKnownApiKeyHashes(filterSelectorsOptions).filter(
+        (hash) => !excluded.has(hash)
+      ),
+    };
+  }, [filterSelectorsOptions, scopeFilters]);
+  const deferScopedAnalytics =
+    deferAnalytics ||
+    (Boolean(scopeFilters?.apiKeyGroupExcludedHashes) &&
+      filterSelectorsOptions === null &&
+      !filterSelectorsAnalytics.error);
+
   const analyticsFilters = useMemo(
-    () => buildAnalyticsFilters(scopeFilters, authMetaMap, channels),
-    [authMetaMap, channels, scopeFilters]
+    () => buildAnalyticsFilters(resolvedScopeFilters, authMetaMap, channels),
+    [authMetaMap, channels, resolvedScopeFilters]
   );
 
   const analyticsGranularity = useMemo(
@@ -529,7 +574,7 @@ export function useMonitoringData({
   );
 
   const analytics = useMonitoringAnalytics({
-    fromMs: deferAnalytics ? undefined : analyticsBounds?.startMs,
+    fromMs: deferScopedAnalytics ? undefined : analyticsBounds?.startMs,
     toMs: analyticsBounds?.endMs,
     nowMs: analyticsNowMs,
     dataScopeKey: analyticsScopeKey,
@@ -537,27 +582,6 @@ export function useMonitoringData({
     searchApiKeyHash,
     filters: analyticsFilters,
     include: analyticsInclude,
-    throttleMs: 1_000,
-  });
-  const filterSelectorsInclude = useMemo(() => buildMonitoringFilterSelectorsInclude(), []);
-  const filterSelectorsScopeKey = useMemo(
-    () =>
-      buildMonitoringFilterSelectorsScopeKey(
-        timeRange,
-        analyticsBounds,
-        searchQuery,
-        searchApiKeyHash
-      ),
-    [analyticsBounds, searchApiKeyHash, searchQuery, timeRange]
-  );
-  const filterSelectorsAnalytics = useMonitoringAnalytics({
-    fromMs: analyticsBounds?.startMs,
-    toMs: analyticsBounds?.endMs,
-    nowMs: analyticsNowMs,
-    dataScopeKey: filterSelectorsScopeKey,
-    searchQuery,
-    searchApiKeyHash,
-    include: filterSelectorsInclude,
     throttleMs: 1_000,
   });
   const analyticsData = analytics.data;
@@ -705,8 +729,8 @@ export function useMonitoringData({
     [allRows, customTimeRange, searchApiKeyHash, searchQuery, timeRange]
   );
   const filteredRows = useMemo(
-    () => buildScopeFilteredRows(rangeFilteredRows, scopeFilters, authMetaMap),
-    [authMetaMap, rangeFilteredRows, scopeFilters]
+    () => buildScopeFilteredRows(rangeFilteredRows, resolvedScopeFilters, authMetaMap),
+    [authMetaMap, rangeFilteredRows, resolvedScopeFilters]
   );
   const statsRows = useMemo(() => filteredRows.filter(shouldIncludeInStats), [filteredRows]);
 
@@ -1048,7 +1072,7 @@ export function useMonitoringData({
   const statusChips = useMemo(() => buildStatusChips(metadata), [metadata]);
 
   return {
-    loading: loading || analytics.loading || deferAnalytics,
+    loading: loading || analytics.loading || deferScopedAnalytics,
     error: [error, analytics.error, filterSelectorsAnalytics.error].filter(Boolean).join('；'),
     authFiles,
     authFilesLoaded,

@@ -1,7 +1,7 @@
 import type { ApiKeyDisplayInfo } from '@/features/monitoring/model/apiKeys';
 import { formatApiKeyHashLabel } from '@/features/monitoring/model/base';
 import type { ApiKeyGroup } from '@/services/api/apiKeyGroups';
-import { ALL_API_KEY_GROUPS } from './apiKeyGroupFilter';
+import { ALL_API_KEY_GROUPS, UNGROUPED_API_KEY_GROUP } from './apiKeyGroupFilter';
 
 /** Mirrors the manager server's limit (model.APIKeyGroupNameMaxRunes). */
 export const API_KEY_GROUP_NAME_MAX_LENGTH = 64;
@@ -47,7 +47,7 @@ export const buildApiKeyGroupKeyEntries = (
 
 /**
  * Applies the manager server's name rules (non-empty, at most 64 characters,
- * unique ignoring case) plus the filter's reserved "all" value.
+ * unique ignoring case) plus the filter's reserved select values.
  */
 export const validateApiKeyGroupName = (
   name: string,
@@ -56,7 +56,7 @@ export const validateApiKeyGroupName = (
   const trimmed = name.trim();
   if (!trimmed) return 'empty';
   if (Array.from(trimmed).length > API_KEY_GROUP_NAME_MAX_LENGTH) return 'too_long';
-  if (trimmed === ALL_API_KEY_GROUPS) return 'reserved';
+  if (trimmed === ALL_API_KEY_GROUPS || trimmed === UNGROUPED_API_KEY_GROUP) return 'reserved';
   const key = trimmed.toLowerCase();
   return otherNames.some((other) => other.trim().toLowerCase() === key) ? 'duplicate' : null;
 };

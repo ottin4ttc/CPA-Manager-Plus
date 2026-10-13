@@ -40,6 +40,7 @@ describe('validateApiKeyGroupName', () => {
       'too_long'
     );
     expect(validateApiKeyGroupName('all', [])).toBe('reserved');
+    expect(validateApiKeyGroupName('__ungrouped__', [])).toBe('reserved');
     expect(validateApiKeyGroupName('Team/A', ['team/a'])).toBe('duplicate');
   });
 

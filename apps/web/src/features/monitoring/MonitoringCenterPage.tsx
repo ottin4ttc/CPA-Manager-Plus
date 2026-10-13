@@ -112,8 +112,10 @@ import {
 } from '@/features/authFiles/bucketOptions';
 import {
   buildApiKeyGroupOptions,
+  collectGroupedApiKeyHashes,
   filterApiKeyOptionsByGroup,
   resolveApiKeyGroupHashes,
+  UNGROUPED_API_KEY_GROUP,
 } from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import { useApiKeyGroups } from '@/features/apiKeyGroups/hooks/useApiKeyGroups';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
@@ -285,12 +287,23 @@ export function MonitoringCenterPage() {
     () => initialMonitoringDrilldownFilters.current.apiKeyGroup
   );
   const apiKeyGroups = useApiKeyGroups();
+  const ungroupedApiKeysSelected = drilldownApiKeyGroup === UNGROUPED_API_KEY_GROUP;
+  // A named group expands here; "ungrouped" is resolved inside useMonitoringData
+  // against the keys seen in the queried range, so only the grouped set is passed.
   const apiKeyGroupHashes = useMemo(
-    () => resolveApiKeyGroupHashes(apiKeyGroups.groups, drilldownApiKeyGroup),
-    [apiKeyGroups.groups, drilldownApiKeyGroup]
+    () =>
+      ungroupedApiKeysSelected
+        ? null
+        : resolveApiKeyGroupHashes(apiKeyGroups.groups, drilldownApiKeyGroup),
+    [apiKeyGroups.groups, drilldownApiKeyGroup, ungroupedApiKeysSelected]
+  );
+  const apiKeyGroupExcludedHashes = useMemo(
+    () => (ungroupedApiKeysSelected ? collectGroupedApiKeyHashes(apiKeyGroups.groups) : null),
+    [apiKeyGroups.groups, ungroupedApiKeysSelected]
   );
   // A selected group reads as empty until the group list arrives.
-  const waitingForApiKeyGroups = apiKeyGroupHashes !== null && apiKeyGroups.loading;
+  const waitingForApiKeyGroups =
+    (apiKeyGroupHashes !== null || ungroupedApiKeysSelected) && apiKeyGroups.loading;
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({});
   const [expandedApiKeys, setExpandedApiKeys] = useState<Record<string, boolean>>({});
   const [focusedAccountId, setFocusedAccountId] = useState<string | null>(null);
@@ -441,10 +454,12 @@ export function MonitoringCenterPage() {
       bucket: drilldownBucket || undefined,
       apiKeyHash: selectedApiKeyHash,
       apiKeyGroupHashes: apiKeyGroupHashes ?? undefined,
+      apiKeyGroupExcludedHashes: apiKeyGroupExcludedHashes ?? undefined,
       headerTraceId: selectedHeaderTraceId,
       status: selectedStatus,
     }),
     [
+      apiKeyGroupExcludedHashes,
       apiKeyGroupHashes,
       drilldownAuthFile,
       drilldownAuthIndex,
@@ -881,17 +896,32 @@ export function MonitoringCenterPage() {
     () =>
       filterApiKeyOptionsByGroup(
         buildApiKeyOptionsFromRows(monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t),
-        apiKeyGroupHashes,
+        ungroupedApiKeysSelected
+          ? resolveApiKeyGroupHashes(
+              apiKeyGroups.groups,
+              drilldownApiKeyGroup,
+              monitoringFilterOptions.apiKeyRows.map((row) => row.apiKeyHash)
+            )
+          : apiKeyGroupHashes,
         selectedApiKeyHash
       ),
-    [apiKeyGroupHashes, monitoringFilterOptions.apiKeyRows, selectedApiKeyHash, t]
+    [
+      apiKeyGroupHashes,
+      apiKeyGroups.groups,
+      drilldownApiKeyGroup,
+      monitoringFilterOptions.apiKeyRows,
+      selectedApiKeyHash,
+      t,
+      ungroupedApiKeysSelected,
+    ]
   );
   const apiKeyGroupOptions = useMemo(
     () =>
       buildApiKeyGroupOptions(
         apiKeyGroups.groups,
         drilldownApiKeyGroup,
-        t('api_key_groups.filter_all')
+        t('api_key_groups.filter_all'),
+        t('api_key_groups.ungrouped_row')
       ),
     [apiKeyGroups.groups, drilldownApiKeyGroup, t]
   );

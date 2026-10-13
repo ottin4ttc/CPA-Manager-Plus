@@ -387,6 +387,9 @@ export interface MonitoringScopeFilters {
   // Member hashes of the selected reporting group; undefined when no group is
   // selected. An empty list must match nothing.
   apiKeyGroupHashes?: string[];
+  // Set for the "ungrouped" selection instead of apiKeyGroupHashes: every
+  // grouped hash. useMonitoringData resolves it to the range's other keys.
+  apiKeyGroupExcludedHashes?: string[];
   status?: 'all' | 'success' | 'failed';
   minLatencyMs?: number;
   cacheStatus?: string;

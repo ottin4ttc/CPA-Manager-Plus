@@ -19,7 +19,7 @@ vi.mock('./useMonitoringAnalytics', () => ({
 }));
 
 import { useMonitoringData, type UseMonitoringDataReturn } from './useMonitoringData';
-import type { MonitoringMetaPayload } from '../model/types';
+import type { MonitoringMetaPayload, MonitoringScopeFilters } from '../model/types';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -246,16 +246,18 @@ describe('useMonitoringData analytics requests', () => {
   function Harness({
     activeDataTab,
     connectionScopeKey = null,
+    filters = scopeFilters,
   }: {
     activeDataTab: MonitoringDataTab;
     connectionScopeKey?: string | null;
+    filters?: MonitoringScopeFilters;
   }) {
     const result = useMonitoringData({
       config: null,
       connectionScopeKey,
       timeRange: 'today',
       searchQuery: '',
-      scopeFilters,
+      scopeFilters: filters,
       activeDataTab,
     });
     useEffect(() => {
@@ -306,6 +308,39 @@ describe('useMonitoringData analytics requests', () => {
       await Promise.resolve();
     });
   };
+
+  it('resolves "ungrouped" to the range keys outside every group', async () => {
+    const ungrouped = { apiKeyGroupExcludedHashes: ['key-b'] };
+    await act(async () => {
+      renderer = create(<Harness activeDataTab="accounts" filters={ungrouped} />);
+      await Promise.resolve();
+    });
+    expect(lastParams((params) => Boolean(params.include?.summary))?.filters).toEqual({
+      api_key_hashes: ['key-a'],
+    });
+
+    await act(async () => {
+      renderer!.update(
+        <Harness activeDataTab="accounts" filters={{ apiKeyGroupExcludedHashes: ['key-a'] }} />
+      );
+      await Promise.resolve();
+    });
+    expect(lastParams((params) => Boolean(params.include?.summary))?.filters).toEqual({
+      api_key_hashes: ['__no_matching_api_key_hash__'],
+    });
+  });
+
+  it('holds the main request for "ungrouped" until the range keys arrive', async () => {
+    currentSelectorResponse = null as unknown as MonitoringAnalyticsResponse;
+    await act(async () => {
+      renderer = create(
+        <Harness activeDataTab="accounts" filters={{ apiKeyGroupExcludedHashes: ['key-b'] }} />
+      );
+      await Promise.resolve();
+    });
+    expect(lastParams((params) => Boolean(params.include?.summary))?.fromMs).toBeUndefined();
+    expect(latestResult?.loading).toBe(true);
+  });
 
   it('switches the main include by tab while keeping one tab-independent selector scope', async () => {
     await renderTab('accounts');

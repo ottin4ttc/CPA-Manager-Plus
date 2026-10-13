@@ -4705,7 +4705,7 @@
     "error_name_empty": "請輸入分組名稱",
     "error_name_too_long": "名稱不能超過 {{max}} 個字元",
     "error_name_duplicate": "已有同名分組（不區分大小寫）",
-    "error_name_reserved": "名稱 all 已被保留",
+    "error_name_reserved": "該名稱為保留字",
     "delete": "刪除分組",
     "delete_confirm": "確定刪除這個分組？不影響任何 key 和路由。",
     "key_search_placeholder": "搜尋 API Key",

@@ -4707,7 +4707,7 @@
     "error_name_empty": "Enter a group name",
     "error_name_too_long": "Names can be at most {{max}} characters",
     "error_name_duplicate": "A group with this name exists (case-insensitive)",
-    "error_name_reserved": "\"all\" is reserved",
+    "error_name_reserved": "This name is reserved",
     "delete": "Delete group",
     "delete_confirm": "Delete this group? Keys and routing are not affected.",
     "key_search_placeholder": "Search API keys",

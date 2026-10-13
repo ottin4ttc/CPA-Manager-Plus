@@ -1,4 +1,5 @@
 import type { ApiKeyGroup } from '@/services/api/apiKeyGroups';
+import { UNGROUPED_API_KEY_GROUP } from './apiKeyGroupFilter';
 import type { MonitoringAnalyticsApiKeyStatRow } from '@/services/api/usageService';
 import {
   costInUsd,
@@ -8,8 +9,8 @@ import {
   type UsageSummaryMetrics,
 } from '@/features/usage-analytics/usageAnalyticsModel';
 
-/** Row id of the "keys in no reporting group" total. */
-export const UNGROUPED_ROW_ID = '__ungrouped__';
+/** Row id of the "keys in no reporting group" total; doubles as its filter value. */
+export const UNGROUPED_ROW_ID = UNGROUPED_API_KEY_GROUP;
 
 export type ApiKeyGroupStatRow = {
   /** Group name, or UNGROUPED_ROW_ID for the keys in no group. */

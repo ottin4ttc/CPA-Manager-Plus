@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { scopeBucketFilterToProvider } from '@/features/authFiles/bucketOptions';
-import { resolveApiKeyGroupHashes } from '@/features/apiKeyGroups/apiKeyGroupFilter';
+import {
+  collectKnownApiKeyHashes,
+  resolveApiKeyGroupHashes,
+  UNGROUPED_API_KEY_GROUP,
+} from '@/features/apiKeyGroups/apiKeyGroupFilter';
 import { buildApiKeyGroupStatRows } from '@/features/apiKeyGroups/apiKeyGroupStats';
 import { useApiKeyGroups } from '@/features/apiKeyGroups/hooks/useApiKeyGroups';
 import { useMonitoringAnalytics } from '@/features/monitoring/hooks/useMonitoringAnalytics';
@@ -239,13 +243,48 @@ export function useUsageAnalytics() {
     () => resolveUsageGranularity(filters, nowMs),
     [filters, nowMs]
   );
-  const apiKeyGroupHashes = useMemo(
-    () => resolveApiKeyGroupHashes(apiKeyGroups.groups, filters.apiKeyGroup),
-    [apiKeyGroups.groups, filters.apiKeyGroup]
+  const filterSelectorsInclude = useMemo(() => buildUsageAnalyticsFilterSelectorsInclude(), []);
+  const filterSelectorsDataScopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        bounds,
+        searchQuery: debouncedSearchQuery,
+      }),
+    [bounds, debouncedSearchQuery]
   );
-  // A selected group reads as empty until the group list arrives, so hold the
-  // scoped requests instead of flashing a "no data" result.
-  const waitingForApiKeyGroups = apiKeyGroupHashes !== null && apiKeyGroups.loading;
+  const filterSelectorsAnalytics = useMonitoringAnalytics({
+    fromMs: bounds?.fromMs,
+    toMs: bounds?.toMs,
+    nowMs,
+    dataScopeKey: filterSelectorsDataScopeKey,
+    searchQuery: debouncedSearchQuery,
+    include: filterSelectorsInclude,
+    throttleMs: 0,
+  });
+
+  // "Ungrouped" expands against the keys seen in the queried range, which the
+  // filter-selector request (independent of the scope filters) reports.
+  const filterSelectorsOptions = filterSelectorsAnalytics.dataStale
+    ? null
+    : (filterSelectorsAnalytics.data?.filter_options ?? null);
+  const apiKeyGroupHashes = useMemo(
+    () =>
+      resolveApiKeyGroupHashes(
+        apiKeyGroups.groups,
+        filters.apiKeyGroup,
+        collectKnownApiKeyHashes(filterSelectorsOptions)
+      ),
+    [apiKeyGroups.groups, filterSelectorsOptions, filters.apiKeyGroup]
+  );
+  // A selected group reads as empty until the group list (and, for
+  // "ungrouped", the range's key list) arrives, so hold the scoped requests
+  // instead of flashing a "no data" result.
+  const waitingForApiKeyGroups =
+    apiKeyGroupHashes !== null &&
+    (apiKeyGroups.loading ||
+      (filters.apiKeyGroup === UNGROUPED_API_KEY_GROUP &&
+        filterSelectorsOptions === null &&
+        !filterSelectorsAnalytics.error));
   const analyticsFilters = useMemo(
     () => buildUsageAnalyticsFilters(filters, authMetaMap, apiKeyGroupHashes),
     [apiKeyGroupHashes, authMetaMap, filters]
@@ -300,25 +339,6 @@ export function useUsageAnalytics() {
     searchQuery: debouncedSearchQuery,
     filters: analyticsFilters,
     include,
-    throttleMs: 0,
-  });
-
-  const filterSelectorsInclude = useMemo(() => buildUsageAnalyticsFilterSelectorsInclude(), []);
-  const filterSelectorsDataScopeKey = useMemo(
-    () =>
-      JSON.stringify({
-        bounds,
-        searchQuery: debouncedSearchQuery,
-      }),
-    [bounds, debouncedSearchQuery]
-  );
-  const filterSelectorsAnalytics = useMonitoringAnalytics({
-    fromMs: bounds?.fromMs,
-    toMs: bounds?.toMs,
-    nowMs,
-    dataScopeKey: filterSelectorsDataScopeKey,
-    searchQuery: debouncedSearchQuery,
-    include: filterSelectorsInclude,
     throttleMs: 0,
   });
 
