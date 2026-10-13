@@ -1,9 +1,11 @@
-import { useId, type CSSProperties, type ComponentType } from 'react';
+import { useId, useState, type CSSProperties, type ComponentType } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   IconArrowDownToLine,
   IconArrowUpFromLine,
   IconBinary,
   IconCheck,
+  IconCopy,
   IconDatabaseZap,
   IconDollarSign,
   IconFileText,
@@ -21,6 +23,8 @@ import type {
   UsageSummaryCardAccent,
   UsageSummaryCardIcon,
 } from '../usageAnalyticsPresentation';
+import { copyToClipboard } from '@/utils/clipboard';
+import { stripNumberGrouping } from '@/utils/format';
 import styles from '../UsageAnalyticsPage.module.scss';
 
 type UsageSummaryDensity = 'default' | 'compact';
@@ -64,12 +68,21 @@ function UsageSummaryCardView({
   valueTitle,
   variant = 'primary',
 }: UsageSummaryCard & { density?: UsageSummaryDensity }) {
+  const { t } = useTranslation();
   const Icon = icon ? summaryIconMap[icon] : null;
   const tooltipId = useId();
+  const [copied, setCopied] = useState(false);
   const resolvedLabel = fullLabel ?? label;
   const tooltipValue = valueTitle ?? value;
   const isCompact = density === 'compact';
   const hasValueTooltip = !isCompact && tooltipValue !== value;
+
+  const copyValue = async () => {
+    const ok = await copyToClipboard(stripNumberGrouping(tooltipValue));
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
   const cardClassName = [
     styles.usageSummaryCard,
     variant === 'secondary' ? styles.usageSummaryCardSecondary : styles.usageSummaryCardPrimary,
@@ -97,14 +110,25 @@ function UsageSummaryCardView({
             className={`${styles.usageSummaryValue} ${tone ? styles[`tone${tone}`] : ''}`}
             tabIndex={hasValueTooltip ? 0 : undefined}
             aria-describedby={hasValueTooltip ? tooltipId : undefined}
-            title={valueTitle}
+            title={isCompact ? valueTitle : undefined}
           >
             {value}
           </strong>
           {hasValueTooltip ? (
             <span id={tooltipId} className={styles.usageSummaryValueTooltip} role="tooltip">
               <span className={styles.usageSummaryValueTooltipLabel}>{resolvedLabel}</span>
-              <span className={styles.usageSummaryValueTooltipValue}>{tooltipValue}</span>
+              <span className={styles.usageSummaryValueTooltipRow}>
+                <span className={styles.usageSummaryValueTooltipValue}>{tooltipValue}</span>
+                <button
+                  type="button"
+                  className={styles.usageSummaryValueTooltipCopy}
+                  onClick={() => void copyValue()}
+                  title={t('common.copy')}
+                  aria-label={t('common.copy')}
+                >
+                  {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                </button>
+              </span>
             </span>
           ) : null}
         </span>

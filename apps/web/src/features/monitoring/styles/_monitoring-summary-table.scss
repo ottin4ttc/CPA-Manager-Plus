@@ -204,10 +204,50 @@
     transform: rotate(45deg);
   }
 
+  // Bridges the gap to the value so the pointer can move into the tooltip.
+  .summaryValueTooltip::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 10px;
+  }
+
   .summaryValueWrap:hover .summaryValueTooltip,
   .summaryValueWrap:focus-within .summaryValueTooltip {
     opacity: 1;
+    pointer-events: auto;
     transform: translateY(0);
+    user-select: text;
+  }
+
+  .summaryValueTooltipRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .summaryValueTooltipCopy {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: color-mix(in srgb, var(--primary-contrast, #fff) 80%, transparent);
+    cursor: pointer;
+  }
+
+  .summaryValueTooltipCopy:hover,
+  .summaryValueTooltipCopy:focus-visible {
+    outline: 0;
+    background: color-mix(in srgb, var(--primary-contrast, #fff) 18%, transparent);
+    color: var(--primary-contrast, #fff);
   }
 
   .summaryValueTooltipLabel {

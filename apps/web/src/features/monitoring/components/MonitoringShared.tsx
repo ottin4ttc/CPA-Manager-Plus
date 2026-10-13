@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import {
@@ -18,6 +19,7 @@ import {
   IconChartLine,
   IconCheck,
   IconCircleHelp,
+  IconCopy,
   IconDatabaseZap,
   IconDollarSign,
   IconInbox,
@@ -32,6 +34,8 @@ import {
   type IconProps,
 } from '@/components/ui/icons';
 import type { MonitoringStatusTone } from '@/features/monitoring/hooks/useMonitoringData';
+import { copyToClipboard } from '@/utils/clipboard';
+import { stripNumberGrouping } from '@/utils/format';
 import styles from '../MonitoringCenterPage.module.scss';
 
 export type SummaryCardIcon =
@@ -152,11 +156,20 @@ export function SummaryCard({
   icon,
   accent = 'blue',
 }: SummaryCardProps) {
+  const { t } = useTranslation();
   const Icon = icon ? summaryIconMap[icon] : null;
   const tooltipId = useId();
+  const [copied, setCopied] = useState(false);
   const tooltipValue = valueTitle ?? value;
   const resolvedLabel = fullLabel ?? label;
   const hasValueTooltip = tooltipValue !== value;
+
+  const copyValue = async () => {
+    const ok = await copyToClipboard(stripNumberGrouping(tooltipValue));
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
   const cardStyle =
     accent === 'neutral'
       ? ({ '--summary-accent': 'var(--data-slate-base)' } as CSSProperties)
@@ -194,7 +207,18 @@ export function SummaryCard({
           {hasValueTooltip ? (
             <span id={tooltipId} className={styles.summaryValueTooltip} role="tooltip">
               <span className={styles.summaryValueTooltipLabel}>{resolvedLabel}</span>
-              <span className={styles.summaryValueTooltipValue}>{tooltipValue}</span>
+              <span className={styles.summaryValueTooltipRow}>
+                <span className={styles.summaryValueTooltipValue}>{tooltipValue}</span>
+                <button
+                  type="button"
+                  className={styles.summaryValueTooltipCopy}
+                  onClick={() => void copyValue()}
+                  title={t('common.copy')}
+                  aria-label={t('common.copy')}
+                >
+                  {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+                </button>
+              </span>
             </span>
           ) : null}
         </span>

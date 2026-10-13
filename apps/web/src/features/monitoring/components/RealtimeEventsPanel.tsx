@@ -24,7 +24,7 @@ import type { MonitoringEventRow } from '@/features/monitoring/hooks/useMonitori
 import type { AccountDisplayMode } from '@/features/monitoring/accountOverviewState';
 import { useNotificationStore } from '@/stores';
 import { copyToClipboard } from '@/utils/clipboard';
-import { maskSensitiveText, truncateText } from '@/utils/format';
+import { formatNumber, maskSensitiveText, truncateText } from '@/utils/format';
 import { formatCompactNumber, formatCostPair } from '@/utils/usage';
 import styles from '../MonitoringCenterPage.module.scss';
 
@@ -726,30 +726,34 @@ type RealtimeTokenUsageDetails = {
   ariaLabel: string;
 };
 
-const buildRealtimeTokenUsageDetails = (row: MonitoringEventRow, t: TFunction) => {
+const buildRealtimeTokenUsageDetails = (
+  row: MonitoringEventRow,
+  t: TFunction,
+  locale: string
+) => {
   const fields = [
-    { label: t('monitoring.realtime_usage_total_label'), value: formatCompactNumber(row.totalTokens) },
-    { label: t('monitoring.realtime_usage_input_label'), value: formatCompactNumber(row.inputTokens) },
-    { label: t('monitoring.realtime_usage_output_label'), value: formatCompactNumber(row.outputTokens) },
+    { label: t('monitoring.realtime_usage_total_label'), value: formatNumber(row.totalTokens, locale) },
+    { label: t('monitoring.realtime_usage_input_label'), value: formatNumber(row.inputTokens, locale) },
+    { label: t('monitoring.realtime_usage_output_label'), value: formatNumber(row.outputTokens, locale) },
     {
       label: t('monitoring.realtime_usage_reasoning_label'),
-      value: String(row.reasoningTokens),
+      value: formatNumber(row.reasoningTokens, locale),
     },
-    { label: t('monitoring.realtime_usage_cached_label'), value: formatCompactNumber(row.cachedTokens) },
+    { label: t('monitoring.realtime_usage_cached_label'), value: formatNumber(row.cachedTokens, locale) },
     {
       label: t('monitoring.realtime_usage_cache_read_label'),
-      value: formatCompactNumber(row.cacheReadTokens),
+      value: formatNumber(row.cacheReadTokens, locale),
     },
     {
       label: t('monitoring.realtime_usage_cache_creation_label'),
-      value: formatCompactNumber(row.cacheCreationTokens),
+      value: formatNumber(row.cacheCreationTokens, locale),
     },
   ];
 
   return {
-    total: fields[0].value,
-    input: fields[1].value,
-    output: fields[2].value,
+    total: formatCompactNumber(row.totalTokens),
+    input: formatCompactNumber(row.inputTokens),
+    output: formatCompactNumber(row.outputTokens),
     fields,
     ariaLabel: fields.map((field) => `${field.label}: ${field.value}`).join(', '),
   } satisfies RealtimeTokenUsageDetails;
@@ -1122,7 +1126,7 @@ export function RealtimeEventsPanel({
               const hasTtftMs = row.ttftMs !== null && row.ttftMs !== undefined;
               const ttftToneClass = getRealtimeDurationToneClass(row.ttftMs);
               const latencyToneClass = getRealtimeDurationToneClass(row.latencyMs);
-              const tokenUsage = buildRealtimeTokenUsageDetails(row, t);
+              const tokenUsage = buildRealtimeTokenUsageDetails(row, t, locale);
               return (
                 <tr key={row.id} className={row.failed ? styles.logRowFailed : undefined}>
                   <td>

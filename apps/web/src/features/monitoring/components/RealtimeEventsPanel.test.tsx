@@ -589,9 +589,11 @@ describe('RealtimeEventsPanel', () => {
     expect(markup).toContain('>Cached</span><span class=');
     expect(markup).toContain('>Cache Read</span><span class=');
     expect(markup).toContain('>Cache Creation</span><span class=');
-    expect(markup).toContain('>151.0K</span>');
-    expect(markup).toContain('>1.0K</span>');
-    expect(markup).toContain('aria-label="Total: 33, Input: 152.6K, Output: 20, Reasoning: 3, Cached: 0, Cache Read: 151.0K, Cache Creation: 1.0K"');
+    expect(markup).toContain('>151,000</span>');
+    expect(markup).toContain('>1,000</span>');
+    expect(markup).toContain('>152,600</span>');
+    expect(markup).toContain('152.6K</span>');
+    expect(markup).toContain('aria-label="Total: 33, Input: 152,600, Output: 20, Reasoning: 3, Cached: 0, Cache Read: 151,000, Cache Creation: 1,000"');
     expect(markup).toContain('tabindex="0"');
   });
 

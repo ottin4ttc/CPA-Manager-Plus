@@ -136,6 +136,13 @@ export function formatNumber(num: number, locale?: string): string {
 }
 
 /**
+ * 去掉整数文本中的千位分隔符，非整数文本原样返回
+ */
+export function stripNumberGrouping(text: string): string {
+  return /^-?\d{1,3}(?:[,\s]\d{3})+$/.test(text) ? text.replace(/[,\s]/g, '') : text;
+}
+
+/**
  * 截断长文本
  */
 export function truncateText(text: string, maxLength: number): string {
