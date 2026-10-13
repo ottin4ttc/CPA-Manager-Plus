@@ -2722,3 +2722,13 @@
     min-width: 560px;
   }
 }
+
+.apiKeyGroupMessage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 0;
+  color: var(--usage-muted);
+  font-size: 13px;
+}

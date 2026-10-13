@@ -1198,6 +1198,62 @@ describe('UsageAnalyticsPage', () => {
     ).toBe(true);
   });
 
+  it('shows the reporting group filter and spend card once groups exist', () => {
+    const groupState = (overrides: Record<string, unknown> = {}) => ({
+      available: true,
+      loading: false,
+      groups: [{ name: '业务线/小麦', apiKeyHashes: ['a'.repeat(64)] }],
+      error: '',
+      save: vi.fn(),
+      reload: vi.fn(),
+      ...overrides,
+    });
+    const findGroupSelect = (renderer: ReactTestRenderer) =>
+      renderer.root
+        .findAllByType(Select)
+        .find((node) => node.props.ariaLabel === 'api_key_groups.filter_label');
+
+    mocks.usageState = createUsageState({ activeTab: 'apiKeys' });
+    let renderer = renderPage();
+    expect(findGroupSelect(renderer)).toBeUndefined();
+    expect(getText(renderer.root)).not.toContain('api_key_groups.card_title');
+
+    const usageState = createUsageState({
+      activeTab: 'apiKeys',
+      apiKeyGroups: groupState(),
+      apiKeyGroupStatRows: [
+        {
+          id: '业务线/小麦',
+          keyCount: 1,
+          activeKeyCount: 1,
+          requestCount: 12,
+          totalTokens: 1200,
+          estimatedCost: 1.25,
+          share: 1,
+        },
+        {
+          id: '__ungrouped__',
+          keyCount: 0,
+          activeKeyCount: 0,
+          requestCount: 0,
+          totalTokens: 0,
+          estimatedCost: 0,
+          share: 0,
+        },
+      ],
+    });
+    mocks.usageState = usageState;
+    renderer = renderPage();
+    expect(findGroupSelect(renderer)?.props.searchable).toBe(true);
+    expect(getText(renderer.root)).toContain('api_key_groups.ungrouped_row');
+
+    const groupRow = renderer.root.findAll(
+      (node) => node.type === 'tr' && getText(node).startsWith('业务线/小麦')
+    )[0];
+    act(() => groupRow.props.onClick());
+    expect(usageState.setFilters).toHaveBeenCalledWith({ apiKeyGroup: '业务线/小麦' });
+  });
+
   it('shows the bucket filter only while the provider filter is codex', () => {
     const findBucketSelect = (renderer: ReactTestRenderer) =>
       renderer.root

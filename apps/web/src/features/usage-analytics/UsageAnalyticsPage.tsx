@@ -107,6 +107,11 @@ import {
   buildApiKeyGroupOptions,
   filterApiKeyOptionsByGroup,
 } from '@/features/apiKeyGroups/apiKeyGroupFilter';
+import {
+  UNGROUPED_ROW_ID,
+  type ApiKeyGroupStatRow,
+} from '@/features/apiKeyGroups/apiKeyGroupStats';
+import { ApiKeyGroupManagerModal } from '@/features/apiKeyGroups/components/ApiKeyGroupManagerModal';
 import { formatCostPair } from '@/utils/usage';
 import styles from './UsageAnalyticsPage.module.scss';
 
@@ -2406,6 +2411,7 @@ function UsageAnalyticsPageInner() {
     useState<UsageMetricKey[]>(DEFAULT_SELECTED_METRICS);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [showAllModels, setShowAllModels] = useState(false);
+  const [apiKeyGroupManagerOpen, setApiKeyGroupManagerOpen] = useState(false);
   const [credentialWarningsForSelectionOnly, setCredentialWarningsForSelectionOnly] =
     useState(false);
   const [customRangeFallbackEndMs] = useState(() => Date.now());
@@ -3346,6 +3352,25 @@ function UsageAnalyticsPageInner() {
       {usage.activeTab === 'apiKeys' ? (
         <>
           <UsageSummarySection cards={apiKeySummaryCards} />
+          {usage.apiKeyGroups.available ? (
+            <ApiKeyGroupStatsPanel
+              rows={usage.apiKeyGroupStatRows}
+              hasGroups={usage.apiKeyGroups.groups.length > 0}
+              loading={usage.apiKeyGroups.loading}
+              error={usage.apiKeyGroups.error}
+              selectedGroup={usage.filters.apiKeyGroup}
+              onSelectGroup={(apiKeyGroup) => updateFilters({ apiKeyGroup })}
+              onManage={() => setApiKeyGroupManagerOpen(true)}
+            />
+          ) : null}
+          {apiKeyGroupManagerOpen ? (
+            <ApiKeyGroupManagerModal
+              groups={usage.apiKeyGroups.groups}
+              apiKeyDisplayMap={usage.apiKeyDisplayMap}
+              onSave={usage.apiKeyGroups.save}
+              onClose={() => setApiKeyGroupManagerOpen(false)}
+            />
+          ) : null}
           <section className={styles.apiKeyAnalysisGrid}>
             <div className={styles.tablePanel}>
               <div className={styles.panelHeader}>
@@ -3807,6 +3832,88 @@ function DrilldownPreviewPanel({ rows, locale }: { rows: UsageDrilldownEvent[]; 
         </div>
       )}
     </div>
+  );
+}
+
+function ApiKeyGroupStatsPanel({
+  rows,
+  hasGroups,
+  loading,
+  error,
+  selectedGroup,
+  onSelectGroup,
+  onManage,
+}: {
+  rows: ApiKeyGroupStatRow[];
+  hasGroups: boolean;
+  loading: boolean;
+  error: string;
+  selectedGroup: string;
+  onSelectGroup: (name: string) => void;
+  onManage: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className={styles.tablePanel}>
+      <div className={styles.panelHeader}>
+        <div>
+          <h2>{t('api_key_groups.card_title')}</h2>
+          <p>{t('api_key_groups.card_note')}</p>
+        </div>
+        <button type="button" onClick={onManage}>
+          {t('api_key_groups.manage')}
+        </button>
+      </div>
+      {error ? <p className={styles.apiKeyGroupMessage}>{error}</p> : null}
+      {loading ? null : hasGroups ? (
+        <div className={styles.tableWrap}>
+          <table className={styles.apiKeyTable}>
+            <thead>
+              <tr>
+                <th>{t('api_key_groups.col_group')}</th>
+                <th>{t('api_key_groups.col_keys')}</th>
+                <th>{t('usage_analytics.metric_request_count')}</th>
+                <th>{t('usage_analytics.metric_total_tokens')}</th>
+                <th>{t('usage_analytics.metric_estimated_cost')}</th>
+                <th>{t('usage_analytics.cost_share')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const ungrouped = row.id === UNGROUPED_ROW_ID;
+                return (
+                  <tr
+                    key={row.id}
+                    className={!ungrouped && row.id === selectedGroup ? styles.selectedRow : ''}
+                    onClick={ungrouped ? undefined : () => onSelectGroup(row.id)}
+                  >
+                    <td>
+                      <span className={styles.entityCell}>
+                        {ungrouped ? t('api_key_groups.ungrouped_row') : row.id}
+                      </span>
+                    </td>
+                    <td>
+                      {ungrouped ? row.keyCount : `${row.activeKeyCount}/${row.keyCount}`}
+                    </td>
+                    <td>{compactNumber(row.requestCount)}</td>
+                    <td>{compactNumber(row.totalTokens)}</td>
+                    <td>{formatRowCost(row)}</td>
+                    <td>{formatPercent(row.share)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className={styles.apiKeyGroupMessage}>
+          <span>{t('api_key_groups.empty')}</span>
+          <Button variant="secondary" size="sm" onClick={onManage}>
+            {t('api_key_groups.add')}
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 
