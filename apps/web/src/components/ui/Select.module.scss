@@ -131,3 +131,49 @@
 .optionHighlighted {
   background: var(--app-accent-soft);
 }
+
+// Searchable dropdowns keep the filter box fixed and scroll only the options.
+.dropdownSearchable {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.searchInput {
+  flex: 0 0 auto;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--app-input-border);
+  border-radius: var(--app-radius-sm);
+  background-color: var(--app-input-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  &:focus {
+    outline: none;
+    background-color: var(--app-input-bg-focus);
+    border-color: var(--app-input-border-focus);
+  }
+}
+
+.searchOptions {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.searchEmpty {
+  padding: 8px 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}

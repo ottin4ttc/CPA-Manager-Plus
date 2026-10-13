@@ -64,7 +64,9 @@
     "model_alias_placeholder": "Model alias (optional)",
     "invalid_provider_index": "Invalid provider index.",
     "unsaved_changes_title": "Unsaved changes",
-    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?"
+    "unsaved_changes_message": "You have unsaved changes. Leaving now will discard them. Do you want to leave?",
+    "select_search_placeholder": "Type to filter…",
+    "select_no_match": "No matches"
   },
   "title": {
     "main": "CPA Manager Plus",

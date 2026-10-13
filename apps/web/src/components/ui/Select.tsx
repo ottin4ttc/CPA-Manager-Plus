@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { IconChevronDown } from './icons';
 import styles from './Select.module.scss';
 
@@ -31,6 +32,8 @@ interface SelectProps {
   ariaDescribedBy?: string;
   fullWidth?: boolean;
   id?: string;
+  /** Adds a filter box above the options that matches option labels. */
+  searchable?: boolean;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -91,19 +94,38 @@ export function Select({
   ariaDescribedBy,
   fullWidth = true,
   id,
+  searchable = false,
 }: SelectProps) {
+  const { t } = useTranslation();
   const generatedId = useId();
   const selectId = id ?? generatedId;
   const listboxId = `${selectId}-listbox`;
   const [open, setOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null);
   const selectedIndex = useMemo(
     () => options.findIndex((option) => option.value === value),
     [options, value]
+  );
+  const normalizedQuery = searchable ? query.trim().toLowerCase() : '';
+  // Highlight, keyboard and option ids all index into the visible list, which
+  // is the full list unless a search query narrows it.
+  const visibleOptions = useMemo(
+    () =>
+      normalizedQuery
+        ? options.filter((option) => option.label.toLowerCase().includes(normalizedQuery))
+        : options,
+    [normalizedQuery, options]
+  );
+  const visibleSelectedIndex = useMemo(
+    () => visibleOptions.findIndex((option) => option.value === value),
+    [visibleOptions, value]
   );
   const isOpen = open && !disabled;
 
@@ -113,8 +135,16 @@ export function Select({
       document.dispatchEvent(new CustomEvent(SELECT_OPEN_EVENT, { detail: selectId }));
     }
     setOpen(true);
+    setQuery('');
     setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
   }, [disabled, selectId, selectedIndex]);
+
+  // A searchable dropdown owns focus while open, so closing it hands focus back
+  // to the trigger instead of dropping it on the body.
+  const closeSelect = useCallback(() => {
+    setOpen(false);
+    if (searchable) triggerRef.current?.focus();
+  }, [searchable]);
 
   const toggleOpen = useCallback(() => {
     if (disabled) return;
@@ -205,11 +235,11 @@ export function Select({
   }, [isOpen, scheduleDropdownStyleUpdate, updateDropdownStyle]);
 
   const resolvedHighlightedIndex =
-    highlightedIndex >= 0
+    highlightedIndex >= 0 && highlightedIndex < visibleOptions.length
       ? highlightedIndex
-      : selectedIndex >= 0
-        ? selectedIndex
-        : options.length > 0
+      : visibleSelectedIndex >= 0
+        ? visibleSelectedIndex
+        : visibleOptions.length > 0
           ? 0
           : -1;
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
@@ -218,22 +248,23 @@ export function Select({
 
   const commitSelection = useCallback(
     (nextIndex: number) => {
-      const nextOption = options[nextIndex];
+      const nextOption = visibleOptions[nextIndex];
       if (!nextOption) return;
       onChange(nextOption.value);
-      setOpen(false);
-      setHighlightedIndex(nextIndex);
+      closeSelect();
+      setHighlightedIndex(options.indexOf(nextOption));
     },
-    [onChange, options]
+    [closeSelect, onChange, options, visibleOptions]
   );
 
   const moveHighlight = useCallback(
     (direction: 1 | -1) => {
-      if (options.length === 0) return;
-      const nextIndex = (resolvedHighlightedIndex + direction + options.length) % options.length;
+      if (visibleOptions.length === 0) return;
+      const nextIndex =
+        (resolvedHighlightedIndex + direction + visibleOptions.length) % visibleOptions.length;
       setHighlightedIndex(nextIndex);
     },
-    [options.length, resolvedHighlightedIndex]
+    [resolvedHighlightedIndex, visibleOptions.length]
   );
 
   const handleKeyDown = useCallback(
@@ -258,14 +289,14 @@ export function Select({
           moveHighlight(-1);
           return;
         case 'Home':
-          if (!isOpen || options.length === 0) return;
+          if (!isOpen || visibleOptions.length === 0) return;
           event.preventDefault();
           setHighlightedIndex(0);
           return;
         case 'End':
-          if (!isOpen || options.length === 0) return;
+          if (!isOpen || visibleOptions.length === 0) return;
           event.preventDefault();
-          setHighlightedIndex(options.length - 1);
+          setHighlightedIndex(visibleOptions.length - 1);
           return;
         case 'Enter':
         case ' ': {
@@ -282,7 +313,7 @@ export function Select({
         case 'Escape':
           if (!isOpen) return;
           event.preventDefault();
-          setOpen(false);
+          closeSelect();
           return;
         case 'Tab':
           if (isOpen) setOpen(false);
@@ -292,15 +323,53 @@ export function Select({
       }
     },
     [
+      closeSelect,
       commitSelection,
       disabled,
       isOpen,
       moveHighlight,
       openSelect,
-      options.length,
       resolvedHighlightedIndex,
+      visibleOptions.length,
     ]
   );
+
+  // The search box keeps Space, Home and End for text editing; only list
+  // navigation and closing keys drive the dropdown.
+  const handleSearchKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          moveHighlight(1);
+          return;
+        case 'ArrowUp':
+          event.preventDefault();
+          moveHighlight(-1);
+          return;
+        case 'Enter':
+          event.preventDefault();
+          if (resolvedHighlightedIndex >= 0) commitSelection(resolvedHighlightedIndex);
+          return;
+        case 'Escape':
+          event.preventDefault();
+          closeSelect();
+          return;
+        case 'Tab':
+          setOpen(false);
+          return;
+        default:
+          return;
+      }
+    },
+    [closeSelect, commitSelection, moveHighlight, resolvedHighlightedIndex]
+  );
+
+  const dropdownReady = isOpen && dropdownStyle !== null;
+  useEffect(() => {
+    if (!searchable || !dropdownReady) return;
+    searchInputRef.current?.focus({ preventScroll: true });
+  }, [dropdownReady, searchable]);
 
   useEffect(() => {
     if (!isOpen || resolvedHighlightedIndex < 0) return;
@@ -310,36 +379,82 @@ export function Select({
     highlightedOption?.scrollIntoView({ block: 'nearest' });
   }, [isOpen, resolvedHighlightedIndex, selectId]);
 
+  const renderedOptions = visibleOptions.map((opt, index) => {
+    const active = opt.value === value;
+    const highlighted = index === resolvedHighlightedIndex;
+    return (
+      <button
+        key={opt.value}
+        id={`${selectId}-option-${index}`}
+        type="button"
+        role="option"
+        aria-selected={active}
+        className={`${styles.option} ${active ? styles.optionActive : ''} ${highlighted ? styles.optionHighlighted : ''}`.trim()}
+        onMouseEnter={() => setHighlightedIndex(index)}
+        onKeyDown={handleKeyDown}
+        onClick={() => commitSelection(index)}
+      >
+        {opt.label}
+      </button>
+    );
+  });
+
   const dropdown =
     isOpen && dropdownStyle ? (
-      <div
-        ref={dropdownRef}
-        className={[styles.dropdown, dropdownClassName].filter(Boolean).join(' ')}
-        id={listboxId}
-        role="listbox"
-        aria-label={ariaLabel}
-        style={dropdownStyle}
-      >
-        {options.map((opt, index) => {
-          const active = opt.value === value;
-          const highlighted = index === resolvedHighlightedIndex;
-          return (
-            <button
-              key={opt.value}
-              id={`${selectId}-option-${index}`}
-              type="button"
-              role="option"
-              aria-selected={active}
-              className={`${styles.option} ${active ? styles.optionActive : ''} ${highlighted ? styles.optionHighlighted : ''}`.trim()}
-              onMouseEnter={() => setHighlightedIndex(index)}
-              onKeyDown={handleKeyDown}
-              onClick={() => commitSelection(index)}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
+      searchable ? (
+        <div
+          ref={dropdownRef}
+          className={[styles.dropdown, styles.dropdownSearchable, dropdownClassName]
+            .filter(Boolean)
+            .join(' ')}
+          style={dropdownStyle}
+        >
+          <input
+            ref={searchInputRef}
+            type="text"
+            className={styles.searchInput}
+            value={query}
+            placeholder={t('common.select_search_placeholder')}
+            aria-label={t('common.select_search_placeholder')}
+            aria-controls={listboxId}
+            aria-activedescendant={
+              resolvedHighlightedIndex >= 0
+                ? `${selectId}-option-${resolvedHighlightedIndex}`
+                : undefined
+            }
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setHighlightedIndex(0);
+            }}
+            onKeyDown={handleSearchKeyDown}
+          />
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label={ariaLabel}
+            className={styles.searchOptions}
+          >
+            {renderedOptions.length > 0 ? (
+              renderedOptions
+            ) : (
+              <div className={styles.searchEmpty}>{t('common.select_no_match')}</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div
+          ref={dropdownRef}
+          className={[styles.dropdown, dropdownClassName].filter(Boolean).join(' ')}
+          id={listboxId}
+          role="listbox"
+          aria-label={ariaLabel}
+          style={dropdownStyle}
+        >
+          {renderedOptions}
+        </div>
+      )
     ) : null;
 
   return (
@@ -349,6 +464,7 @@ export function Select({
         ref={wrapRef}
       >
         <button
+          ref={triggerRef}
           id={selectId}
           type="button"
           className={[styles.trigger, triggerClassName].filter(Boolean).join(' ')}

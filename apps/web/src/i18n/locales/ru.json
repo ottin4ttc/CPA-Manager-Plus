@@ -64,7 +64,9 @@
     "model_alias_placeholder": "Псевдоним модели (необязательно)",
     "invalid_provider_index": "Неверный индекс провайдера.",
     "unsaved_changes_title": "Несохранённые изменения",
-    "unsaved_changes_message": "У вас есть несохранённые изменения. Если вы уйдёте, они будут потеряны. Выйти?"
+    "unsaved_changes_message": "У вас есть несохранённые изменения. Если вы уйдёте, они будут потеряны. Выйти?",
+    "select_search_placeholder": "Введите для фильтра…",
+    "select_no_match": "Нет совпадений"
   },
   "title": {
     "main": "CPA Manager Plus",
