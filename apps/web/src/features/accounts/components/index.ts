@@ -12,6 +12,7 @@ export { QuotaWindowCard } from './QuotaWindowCard';
 
 export { AccountQuotaMatrix } from './AccountQuotaMatrix';
 export { AccountsBatchDeletePreview } from './AccountsBatchDeletePreview';
+export { AntigravityVerifyDialog } from './AntigravityVerifyDialog';
 export { AccountMetricsGrid } from './AccountMetricsGrid';
 export { AccountLatestRequest } from './AccountLatestRequest';
 export { AccountProviderTabs } from './AccountProviderTabs';
