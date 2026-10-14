@@ -354,7 +354,6 @@ export interface AntigravityQuotaState extends CredentialScopedQuotaState {
   serverTimeOffsetMs?: number | null;
   error?: string;
   errorStatus?: number;
-  validationUrl?: string;
 }
 
 export interface CodexQuotaWindow {

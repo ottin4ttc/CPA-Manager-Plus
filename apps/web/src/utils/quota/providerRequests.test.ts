@@ -24,7 +24,9 @@ vi.mock('@/services/api/antigravitySubscription', () => ({
 
 import {
   ANTIGRAVITY_AVAILABLE_MODELS_URLS,
+  ANTIGRAVITY_GENERATE_URL,
   ANTIGRAVITY_QUOTA_SUMMARY_URLS,
+  ANTIGRAVITY_VALIDATION_PROBE_MODELS,
   ANTIGRAVITY_USER_AGENT,
   CLAUDE_PROFILE_URL,
   CLAUDE_USAGE_URL,
@@ -50,6 +52,7 @@ import {
   fetchCodexQuota,
   fetchKimiQuota,
   mergeXaiBillingSummaries,
+  probeAntigravityValidation,
   probeXaiBilling,
   probeXaiInference,
   probeXaiQuota,
@@ -3523,68 +3526,103 @@ describe('fetchAntigravityQuota', () => {
     expect(result.groups).toEqual([]);
     expect(result.quotaInventoryObserved).toBe(true);
   });
+});
 
-  it('attaches the Google verification link to VALIDATION_REQUIRED failures', async () => {
-    const validationUrl =
-      'https://accounts.google.com/signin/continue?sarp=1&plt=abc&flowName=GlifWebSignIn&authuser';
-    const validationError = (url: string) => ({
-      statusCode: 403,
-      hasStatusCode: true,
-      header: {},
-      bodyText: '',
-      body: {
-        error: {
-          code: 403,
-          message: 'Verify your account to continue.',
-          status: 'PERMISSION_DENIED',
-          details: [
-            {
-              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
-              reason: 'VALIDATION_REQUIRED',
-              domain: 'cloudcode-pa.googleapis.com',
-              metadata: { validation_url: url },
-            },
-          ],
-        },
+describe('probeAntigravityValidation', () => {
+  const file = {
+    name: 'antigravity.json',
+    type: 'antigravity',
+    authIndex: 'ag-1',
+    project_id: 'project-1',
+  };
+  const validationUrl =
+    'https://accounts.google.com/signin/continue?sarp=1&plt=abc&flowName=GlifWebSignIn&authuser';
+  const validationError = (url: string) => ({
+    statusCode: 403,
+    hasStatusCode: true,
+    header: {},
+    bodyText: '',
+    body: {
+      error: {
+        code: 403,
+        message: 'Verify your account to continue.',
+        status: 'PERMISSION_DENIED',
+        details: [
+          {
+            '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+            reason: 'VALIDATION_REQUIRED',
+            domain: 'cloudcode-pa.googleapis.com',
+            metadata: { validation_url: url },
+          },
+        ],
       },
-    });
-    mocks.request
-      .mockResolvedValueOnce(validationError('https://evil.example.com/verify'))
-      .mockResolvedValue(validationError(validationUrl));
-
-    const error = await fetchAntigravityQuota(
-      {
-        name: 'antigravity.json',
-        type: 'antigravity',
-        authIndex: 'ag-1',
-        project_id: 'project-1',
-      },
-      t
-    ).catch((err: unknown) => err);
-
-    expect(error).toMatchObject({ status: 403, validationUrl });
+    },
   });
 
-  it('does not attach a verification link to other failures', async () => {
-    mocks.request.mockResolvedValue({
-      statusCode: 403,
+  it('sends a minimal model call and returns the Google verification link', async () => {
+    mocks.request.mockResolvedValueOnce(validationError(validationUrl));
+
+    const result = await probeAntigravityValidation(file, t);
+
+    expect(result).toEqual({ validationUrl });
+    expect(mocks.request).toHaveBeenCalledTimes(1);
+    const payload = mocks.request.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      authIndex: 'ag-1',
+      method: 'POST',
+      url: ANTIGRAVITY_GENERATE_URL,
+    });
+    expect(JSON.parse(payload.data)).toMatchObject({
+      model: ANTIGRAVITY_VALIDATION_PROBE_MODELS[0],
+      project: 'project-1',
+    });
+  });
+
+  it('reports no verification needed when the model call succeeds', async () => {
+    mocks.request.mockResolvedValueOnce({
+      statusCode: 200,
       hasStatusCode: true,
       header: {},
       bodyText: '',
-      body: { error: { code: 403, message: 'Permission denied', status: 'PERMISSION_DENIED' } },
+      body: { response: { candidates: [] } },
     });
 
-    const error = await fetchAntigravityQuota(
-      {
-        name: 'antigravity.json',
-        type: 'antigravity',
-        authIndex: 'ag-1',
-        project_id: 'project-1',
-      },
-      t
-    ).catch((err: unknown) => err);
+    await expect(probeAntigravityValidation(file, t)).resolves.toEqual({ validationUrl: null });
+  });
 
-    expect(error).toMatchObject({ status: 403 });
-    expect(error).not.toHaveProperty('validationUrl');
+  it('tries the next probe model when a model is not found', async () => {
+    mocks.request
+      .mockResolvedValueOnce({
+        statusCode: 404,
+        hasStatusCode: true,
+        header: {},
+        bodyText: '',
+        body: { error: { code: 404, message: 'Requested entity was not found.' } },
+      })
+      .mockResolvedValueOnce(validationError(validationUrl));
+
+    await expect(probeAntigravityValidation(file, t)).resolves.toEqual({ validationUrl });
+    expect(JSON.parse(mocks.request.mock.calls[1][0].data).model).toBe(
+      ANTIGRAVITY_VALIDATION_PROBE_MODELS[1]
+    );
+  });
+
+  it('ignores verification links outside accounts.google.com', async () => {
+    mocks.request.mockResolvedValueOnce(validationError('https://evil.example.com/verify'));
+
+    await expect(probeAntigravityValidation(file, t)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('throws other upstream failures', async () => {
+    mocks.request.mockResolvedValueOnce({
+      statusCode: 429,
+      hasStatusCode: true,
+      header: {},
+      bodyText: 'Resource has been exhausted',
+      body: null,
+    });
+
+    await expect(probeAntigravityValidation(file, t)).rejects.toMatchObject({ status: 429 });
+    expect(mocks.request).toHaveBeenCalledTimes(1);
   });
 });

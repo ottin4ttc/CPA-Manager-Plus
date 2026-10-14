@@ -1656,12 +1656,15 @@
     "duration_less_than_minute": "小於 1 分鐘",
     "refresh_button": "重新整理配額",
     "fetch_all": "取得全部",
-    "validation_required": "需要 Google 帳號驗證",
-    "unlock_action": "前往驗證並自動解鎖",
+    "verify_action": "驗證帳號（Google 驗證 + 自動解鎖）",
+    "verify_suggested": "CPA 呼叫回傳 403，可能需要 Google 驗證，點擊檢測",
+    "verify_opened": "{{name}} 需要 Google 驗證，已開啟驗證頁面；完成後會自動解鎖",
+    "verify_popup_blocked": "{{name}} 需要 Google 驗證，瀏覽器攔截了彈出視窗，請再點一次驗證按鈕",
+    "verify_not_required": "{{name}} 無需驗證，已清除 CPA 冷卻",
     "unlock_waiting": "等待驗證完成，每 10 秒檢測一次；可再次點擊重新開啟驗證連結",
     "unlock_success": "{{name}} 驗證通過，已清除 CPA 冷卻",
     "unlock_timeout": "{{name}} 10 分鐘內未檢測到驗證完成，可再次點擊驗證按鈕",
-    "unlock_failed": "{{name}} 自動解鎖失敗"
+    "unlock_failed": "{{name}} 驗證檢測失敗"
   },
   "antigravity_subscription": {
     "subscription_label": "訂閱",

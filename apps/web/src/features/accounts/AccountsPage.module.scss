@@ -871,6 +871,16 @@
   }
 }
 
+.accountIconButtonWarning:global(.btn) {
+  background: color-mix(in srgb, var(--accounts-warning) 14%, var(--bg-primary));
+  color: var(--accounts-warning);
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--accounts-warning) 28%, transparent);
+    background: color-mix(in srgb, var(--accounts-warning) 20%, var(--bg-primary));
+  }
+}
+
 .accountIconButtonModels:global(.btn) {
   background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-primary));
   color: var(--primary-color);

@@ -22,7 +22,6 @@ import {
   IconCopy,
   IconDollarSign,
   IconDownload,
-  IconExternalLink,
   IconEye,
   IconEyeOff,
   IconFileText,
@@ -35,6 +34,7 @@ import {
   IconSend,
   IconSettings,
   IconShield,
+  IconShieldCheck,
   IconSlidersHorizontal,
   IconTrash2,
   IconX,
@@ -293,6 +293,7 @@ import {
 } from '@/services/api';
 import type { AuthFileItem, CodexQuotaState, XaiQuotaState } from '@/types';
 import type { CodexQuotaData } from '@/utils/quota';
+import { probeAntigravityValidation } from '@/utils/quota/providerRequests';
 import type { AuthJsonInputType } from '@/features/authFiles/sessionAuthConverter';
 import {
   maskQuotaAccountText,
@@ -926,9 +927,7 @@ async function refreshQuotaWithConfig<TState, TData>({
             message,
             Number.isFinite(status) ? status : undefined,
             file,
-            previousState,
-            undefined,
-            error
+            previousState
           ),
         };
       });
@@ -1374,6 +1373,7 @@ export function AccountsPage() {
   const quotaRequestVersionsRef = useRef<Map<string, number>>(new Map());
   const resettingQuotaKeysRef = useRef<Set<string>>(new Set());
   const antigravityUnlockKeysRef = useRef<Set<string>>(new Set());
+  const antigravityVerifyLinksRef = useRef<Map<string, string>>(new Map());
   const identityCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accountSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const accountSortTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -5605,69 +5605,99 @@ export function AccountsPage() {
     [refreshQuotaRows]
   );
 
-  const getAntigravityValidationUrl = (row: AccountRow): string | null => {
-    if (row.provider !== ANTIGRAVITY_CONFIG.type) return null;
-    const state = getCredentialScopedQuotaState(antigravityQuota, row.raw);
-    return state?.status === 'error' ? (state.validationUrl ?? null) : null;
-  };
+  // CPA records a 403 model-call failure as a cooldown; for Antigravity this is
+  // usually Google asking the account to verify itself.
+  const hasAntigravityForbiddenCooldown = (row: AccountRow): boolean =>
+    row.provider === ANTIGRAVITY_CONFIG.type &&
+    Array.isArray(row.raw.cooldowns) &&
+    row.raw.cooldowns.some(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        Number((item as { http_status?: unknown }).http_status) === 403
+    );
 
-  // Opens Google's account verification link, then polls the account's quota
-  // until verification takes effect and clears CPA's cooldown for it.
-  const startAntigravityUnlock = useCallback(
-    (row: AccountRow, validationUrl: string) => {
-      window.open(validationUrl, '_blank', 'noopener,noreferrer');
-      const unlockKey = row.selectionKey;
-      if (antigravityUnlockKeysRef.current.has(unlockKey)) return;
-      antigravityUnlockKeysRef.current.add(unlockKey);
-      setAntigravityUnlockKeys((prev) => new Set(prev).add(unlockKey));
+  // Probes the account with a model call. When Google asks for verification,
+  // opens the verification page and keeps probing until it passes, then clears
+  // CPA's cooldown for the account.
+  const startAntigravityVerify = useCallback(
+    (row: AccountRow) => {
+      const verifyKey = row.selectionKey;
+      const pendingLink = antigravityVerifyLinksRef.current.get(verifyKey);
+      if (pendingLink) {
+        window.open(pendingLink, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (antigravityUnlockKeysRef.current.has(verifyKey)) return;
+      // Open the window inside the click so popup blockers allow it; it is
+      // pointed at the verification page once the probe returns.
+      const popup = window.open('', '_blank');
+      if (popup) popup.opener = null;
+      antigravityUnlockKeysRef.current.add(verifyKey);
+      setAntigravityUnlockKeys((prev) => new Set(prev).add(verifyKey));
       const displayName = getDisplayAccount(row);
+      const notify = (message: string, type: 'success' | 'warning' | 'error') => {
+        if (isMountedRef.current) showNotification(message, type);
+      };
+      const resetCooldown = async () => {
+        const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex);
+        if (authIndex) await authFilesApi.resetQuota(authIndex, authFilesRequestScope);
+      };
       void (async () => {
         try {
+          const first = await probeAntigravityValidation(row.raw, t, authFilesRequestScope);
+          if (!first.validationUrl) {
+            popup?.close();
+            await resetCooldown();
+            notify(t('antigravity_quota.verify_not_required', { name: displayName }), 'success');
+            return;
+          }
+          antigravityVerifyLinksRef.current.set(verifyKey, first.validationUrl);
+          if (popup && !popup.closed) {
+            popup.location.href = first.validationUrl;
+            notify(t('antigravity_quota.verify_opened', { name: displayName }), 'warning');
+          } else {
+            notify(t('antigravity_quota.verify_popup_blocked', { name: displayName }), 'warning');
+          }
           for (let attempt = 0; attempt < ANTIGRAVITY_UNLOCK_MAX_POLLS; attempt += 1) {
             await new Promise((resolve) =>
               window.setTimeout(resolve, ANTIGRAVITY_UNLOCK_POLL_INTERVAL_MS)
             );
             if (!isMountedRef.current) return;
-            if (!(await refreshQuotaForRow(row))) continue;
-            const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex);
-            if (authIndex) {
-              await authFilesApi.resetQuota(authIndex, authFilesRequestScope);
+            const next = await probeAntigravityValidation(row.raw, t, authFilesRequestScope).catch(
+              () => null
+            );
+            if (!next) continue;
+            if (next.validationUrl) {
+              antigravityVerifyLinksRef.current.set(verifyKey, next.validationUrl);
+              continue;
             }
-            if (isMountedRef.current) {
-              showNotification(
-                t('antigravity_quota.unlock_success', { name: displayName }),
-                'success'
-              );
-            }
+            await resetCooldown();
+            notify(t('antigravity_quota.unlock_success', { name: displayName }), 'success');
             return;
           }
-          if (isMountedRef.current) {
-            showNotification(
-              t('antigravity_quota.unlock_timeout', { name: displayName }),
-              'warning'
-            );
-          }
+          notify(t('antigravity_quota.unlock_timeout', { name: displayName }), 'warning');
         } catch (err: unknown) {
-          if (isMountedRef.current) {
-            const message = err instanceof Error ? err.message : t('common.unknown_error');
-            showNotification(
-              `${t('antigravity_quota.unlock_failed', { name: displayName })}: ${message}`,
-              'error'
-            );
-          }
+          if (!antigravityVerifyLinksRef.current.has(verifyKey)) popup?.close();
+          const message = err instanceof Error ? err.message : t('common.unknown_error');
+          notify(
+            `${t('antigravity_quota.unlock_failed', { name: displayName })}: ${message}`,
+            'error'
+          );
         } finally {
-          antigravityUnlockKeysRef.current.delete(unlockKey);
+          antigravityVerifyLinksRef.current.delete(verifyKey);
+          antigravityUnlockKeysRef.current.delete(verifyKey);
           if (isMountedRef.current) {
             setAntigravityUnlockKeys((prev) => {
               const next = new Set(prev);
-              next.delete(unlockKey);
+              next.delete(verifyKey);
               return next;
             });
           }
         }
       })();
     },
-    [authFilesRequestScope, getDisplayAccount, refreshQuotaForRow, showNotification, t]
+    [authFilesRequestScope, getDisplayAccount, showNotification, t]
   );
 
   const refreshAccountHistory = useCallback(
@@ -6801,27 +6831,33 @@ export function AccountsPage() {
   };
 
   const renderRowActions = (row: AccountRow, needsReauth = false) => {
-    const antigravityValidationUrl = getAntigravityValidationUrl(row);
-    const antigravityUnlocking = antigravityUnlockKeys.has(row.selectionKey);
+    const antigravityVerifying = antigravityUnlockKeys.has(row.selectionKey);
+    const antigravityVerifySuggested = hasAntigravityForbiddenCooldown(row);
     return (
       <div className={styles.rowActions} onClick={(event) => event.stopPropagation()}>
         <div className={styles.accountQuickActionsGrid}>
-          {antigravityValidationUrl ? (
+          {row.provider === ANTIGRAVITY_CONFIG.type ? (
             <Button
               variant="secondary"
               size="sm"
               iconOnly
-              className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
-              onClick={() => startAntigravityUnlock(row, antigravityValidationUrl)}
+              className={`${styles.accountIconButton} ${
+                antigravityVerifySuggested
+                  ? styles.accountIconButtonWarning
+                  : styles.accountIconButtonRefresh
+              }`}
+              onClick={() => startAntigravityVerify(row)}
               disabled={row.runtimeOnly}
               title={
-                antigravityUnlocking
+                antigravityVerifying
                   ? t('antigravity_quota.unlock_waiting')
-                  : t('antigravity_quota.unlock_action')
+                  : antigravityVerifySuggested
+                    ? t('antigravity_quota.verify_suggested')
+                    : t('antigravity_quota.verify_action')
               }
-              aria-label={t('antigravity_quota.unlock_action')}
+              aria-label={t('antigravity_quota.verify_action')}
             >
-              {antigravityUnlocking ? <LoadingSpinner size={14} /> : <IconExternalLink size={15} />}
+              {antigravityVerifying ? <LoadingSpinner size={14} /> : <IconShieldCheck size={15} />}
             </Button>
           ) : null}
           {needsReauth ? (
@@ -7282,9 +7318,7 @@ export function AccountsPage() {
                       })
                     ) : (
                       <span className={styles.quotaEmptyState} data-account-quota-empty="true">
-                        {getAntigravityValidationUrl(row)
-                          ? t('antigravity_quota.validation_required')
-                          : t('accounts.quota_source_none')}
+                        {t('accounts.quota_source_none')}
                       </span>
                     )}
                     {hiddenQuotaWindowCount > 0 ? (

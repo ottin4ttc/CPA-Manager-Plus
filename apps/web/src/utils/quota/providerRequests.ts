@@ -34,8 +34,10 @@ import {
 import { authFilesApi } from '@/services/api/authFiles';
 import {
   ANTIGRAVITY_AVAILABLE_MODELS_URLS,
+  ANTIGRAVITY_GENERATE_URL,
   ANTIGRAVITY_QUOTA_SUMMARY_URLS,
   ANTIGRAVITY_REQUEST_HEADERS,
+  ANTIGRAVITY_VALIDATION_PROBE_MODELS,
   CLAUDE_PROFILE_URL,
   CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_URL,
@@ -275,7 +277,6 @@ export const fetchAntigravityQuota = async (
   let priorityStatus: number | undefined;
   let hadSuccess = false;
   let quotaInventoryObserved = false;
-  let validationUrl: string | null = null;
 
   for (const url of [...ANTIGRAVITY_QUOTA_SUMMARY_URLS, ...ANTIGRAVITY_AVAILABLE_MODELS_URLS]) {
     try {
@@ -296,7 +297,6 @@ export const fetchAntigravityQuota = async (
         if (result.statusCode === 403 || result.statusCode === 404) {
           priorityStatus ??= result.statusCode;
         }
-        validationUrl ??= parseAntigravityValidationUrl(result.body ?? result.bodyText);
         continue;
       }
 
@@ -343,14 +343,63 @@ export const fetchAntigravityQuota = async (
     };
   }
 
-  const error = createStatusError(
-    lastError || t('common.unknown_error'),
-    priorityStatus ?? lastStatus
-  );
-  if (validationUrl) {
-    throw Object.assign(error, { validationUrl });
+  throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
+};
+
+/**
+ * Sends a minimal Antigravity model call and reports whether Google requires the
+ * account to be verified. Resolves with the verification link, or null when the
+ * call succeeds.
+ */
+export const probeAntigravityValidation = async (
+  file: AuthFileItem,
+  t: TFunction,
+  requestScope?: ApiClientRequestScope
+): Promise<{ validationUrl: string | null }> => {
+  const authIndex = normalizeAuthIndex(file['auth_index'] ?? file.authIndex);
+  if (!authIndex) {
+    throw new Error(t('antigravity_quota.missing_auth_index'));
   }
-  throw error;
+
+  const projectId = await resolveAntigravityProjectId(file, requestScope);
+  const requestConfig = requestScope ? createScopedApiRequestConfig(requestScope) : undefined;
+  let lastError = '';
+  let lastStatus: number | undefined;
+
+  for (const model of ANTIGRAVITY_VALIDATION_PROBE_MODELS) {
+    const result = await apiCallApi.request(
+      {
+        authIndex,
+        method: 'POST',
+        url: ANTIGRAVITY_GENERATE_URL,
+        header: { ...ANTIGRAVITY_REQUEST_HEADERS },
+        data: JSON.stringify({
+          model,
+          userAgent: 'antigravity',
+          requestType: 'agent',
+          project: projectId,
+          requestId: `agent-${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`,
+          request: {
+            contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+            generationConfig: { maxOutputTokens: 8 },
+          },
+        }),
+      },
+      requestConfig
+    );
+    if (result.statusCode >= 200 && result.statusCode < 300) {
+      return { validationUrl: null };
+    }
+    const validationUrl = parseAntigravityValidationUrl(result.body ?? result.bodyText);
+    if (validationUrl) {
+      return { validationUrl };
+    }
+    lastError = getApiCallErrorMessage(result);
+    lastStatus = result.statusCode;
+    if (result.statusCode !== 404) break;
+  }
+
+  throw createStatusError(lastError || t('common.unknown_error'), lastStatus);
 };
 
 export const buildCodexQuotaWindows = (

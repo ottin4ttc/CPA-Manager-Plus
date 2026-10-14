@@ -1658,12 +1658,15 @@
     "duration_less_than_minute": "<1m",
     "refresh_button": "Refresh Quota",
     "fetch_all": "Fetch All",
-    "validation_required": "Google account verification required",
-    "unlock_action": "Verify and auto-unlock",
+    "verify_action": "Verify account (Google verification + auto-unlock)",
+    "verify_suggested": "CPA got a 403 from this account; it may need Google verification. Click to check",
+    "verify_opened": "{{name}} needs Google verification; the verification page is open and the account unlocks automatically once done",
+    "verify_popup_blocked": "{{name}} needs Google verification, but the popup was blocked; click the verify button again",
+    "verify_not_required": "{{name}} needs no verification; CPA cooldown cleared",
     "unlock_waiting": "Waiting for verification, checking every 10s; click again to reopen the verification link",
     "unlock_success": "{{name}} verified, CPA cooldown cleared",
     "unlock_timeout": "{{name}} was not verified within 10 minutes; click the verify button to try again",
-    "unlock_failed": "{{name}} auto-unlock failed"
+    "unlock_failed": "{{name}} verification check failed"
   },
   "antigravity_subscription": {
     "subscription_label": "Subscription",

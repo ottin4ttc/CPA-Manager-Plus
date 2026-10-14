@@ -71,6 +71,15 @@ export const ANTIGRAVITY_AVAILABLE_MODELS_URLS = [
 
 export const ANTIGRAVITY_QUOTA_URLS = ANTIGRAVITY_QUOTA_SUMMARY_URLS;
 
+// Google only asks an Antigravity account to verify itself on a model call, so
+// the verification check sends a minimal generation request.
+export const ANTIGRAVITY_GENERATE_URL =
+  'https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent';
+
+// gemini-3.8-flash is hidden from the CLI user agent, so probe with older flash
+// models; the next one is tried when a model is not found.
+export const ANTIGRAVITY_VALIDATION_PROBE_MODELS = ['gemini-3-flash', 'gemini-3.1-flash-lite'];
+
 export const ANTIGRAVITY_CODE_ASSIST_URLS = [
   'https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',
   'https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist',

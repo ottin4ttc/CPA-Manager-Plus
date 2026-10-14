@@ -62,12 +62,7 @@ export interface QuotaConfig<TState, TData> {
   getStoreKey?: (file: AuthFileItem) => string;
   buildLoadingState: (file?: AuthFileItem) => TState;
   buildSuccessState: (data: TData, file?: AuthFileItem) => TState;
-  buildErrorState: (
-    message: string,
-    status?: number,
-    file?: AuthFileItem,
-    error?: unknown
-  ) => TState;
+  buildErrorState: (message: string, status?: number, file?: AuthFileItem) => TState;
   buildFailureState?: (
     message: string,
     status: number | undefined,
@@ -107,12 +102,11 @@ export const buildQuotaFailureState = <TState, TData>(
   status: number | undefined,
   file: AuthFileItem | undefined,
   activeState: TState | undefined,
-  failedAtMs = Date.now(),
-  error?: unknown
+  failedAtMs = Date.now()
 ): TState =>
   config.buildFailureState
     ? config.buildFailureState(message, status, file, activeState, failedAtMs)
-    : config.buildErrorState(message, status, file, error);
+    : config.buildErrorState(message, status, file);
 
 type DisplayQuotaState = {
   status?: 'idle' | 'loading' | 'success' | 'error';
@@ -584,23 +578,16 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
     ...buildQuotaCredentialIdentity(file),
     fetchedAtMs: Date.now(),
   }),
-  buildErrorState: (message, status, file, error) => {
-    const validationUrl =
-      typeof error === 'object' && error !== null && 'validationUrl' in error
-        ? (error as { validationUrl?: unknown }).validationUrl
-        : undefined;
-    return {
-      status: 'error',
-      groups: [],
-      subscription: null,
-      serverTimeOffsetMs: null,
-      error: message,
-      errorStatus: status,
-      ...(typeof validationUrl === 'string' && validationUrl ? { validationUrl } : {}),
-      ...buildQuotaCredentialIdentity(file),
-      failedAtMs: Date.now(),
-    };
-  },
+  buildErrorState: (message, status, file) => ({
+    status: 'error',
+    groups: [],
+    subscription: null,
+    serverTimeOffsetMs: null,
+    error: message,
+    errorStatus: status,
+    ...buildQuotaCredentialIdentity(file),
+    failedAtMs: Date.now(),
+  }),
   scopeState: scopeCredentialQuotaState,
 };
 

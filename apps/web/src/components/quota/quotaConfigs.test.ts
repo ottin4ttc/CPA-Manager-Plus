@@ -116,35 +116,6 @@ describe('buildQuotaFailureState', () => {
       failedAtMs: 2_000,
     });
   });
-
-  it('keeps the Antigravity verification link from the fetch error', () => {
-    const file = { name: 'antigravity.json', type: 'antigravity' };
-    const validationUrl = 'https://accounts.google.com/signin/continue?plt=abc';
-    const error = Object.assign(new Error('403 Verify your account to continue.'), {
-      status: 403,
-      validationUrl,
-    });
-
-    const withLink = buildQuotaFailureState(
-      ANTIGRAVITY_CONFIG,
-      error.message,
-      403,
-      file,
-      undefined,
-      undefined,
-      error
-    );
-    const withoutLink = buildQuotaFailureState(
-      ANTIGRAVITY_CONFIG,
-      error.message,
-      403,
-      file,
-      undefined
-    );
-
-    expect(withLink).toMatchObject({ status: 'error', errorStatus: 403, validationUrl });
-    expect(withoutLink).not.toHaveProperty('validationUrl');
-  });
 });
 
 describe('getSortedCodexResetCreditExpiries', () => {
