@@ -171,6 +171,39 @@ func TestParseResponseHeaderMetadataXAIDiagnostics(t *testing.T) {
 	}
 }
 
+func TestParseResponseHeaderMetadataVODTaskID(t *testing.T) {
+	metadata := ParseResponseHeaderMetadata(map[string]any{
+		"X-Vod-Task-Id":         []any{"tsk-nd7qz0mms9jddg2a"},
+		"X-Vod-Request-Id":      []any{"tsk-nd7qz0mms9jddg2a"},
+		"X-Client-Request-Id":   []any{"607aedb0-b1e0-4558-9482-c1ba5f516022"},
+		"X-Cloud-Trace-Context": []any{"73e16e0f91fc3c0a63ed6c47c71e2443/17013749655205888604"},
+		"Traceparent":           []any{"00-73e16e0f91fc3c0a63ed6c47c71e2443-ec1cfb2b2ff8c25c-00"},
+		"Server":                []any{"Google Frontend"},
+	}, time.Unix(1_780_000_000, 0))
+	if metadata == nil || metadata.Trace == nil {
+		t.Fatalf("metadata = %#v", metadata)
+	}
+	if metadata.Trace.VODTaskID != "tsk-nd7qz0mms9jddg2a" {
+		t.Fatalf("vod task id = %#v", metadata.Trace)
+	}
+	if metadata.Trace.PrimaryTraceID != "tsk-nd7qz0mms9jddg2a" {
+		t.Fatalf("primary trace id should prefer the VOD task id over client request id, got %#v", metadata.Trace)
+	}
+	if metadata.Trace.ClientRequestID != "607aedb0-b1e0-4558-9482-c1ba5f516022" {
+		t.Fatalf("client request id = %#v", metadata.Trace)
+	}
+	if derived := DeriveResponseHeaderMetadata(metadata); derived.TraceID != "tsk-nd7qz0mms9jddg2a" {
+		t.Fatalf("derived trace id = %q", derived.TraceID)
+	}
+
+	leaked := ParseResponseHeaderMetadata(map[string]any{
+		"X-Vod-Task-Id": []any{"sk-abcdefghijklmnop"},
+	}, time.Unix(1_780_000_000, 0))
+	if leaked != nil && leaked.Trace != nil && strings.Contains(leaked.Trace.VODTaskID+leaked.Trace.PrimaryTraceID, "abcdefghijklmnop") {
+		t.Fatalf("non task id value must still be scrubbed: %#v", leaked.Trace)
+	}
+}
+
 func TestParseResponseHeaderMetadataRejectsInvalidTraceparent(t *testing.T) {
 	metadata := ParseResponseHeaderMetadata(map[string]any{
 		"Traceparent":  []any{"Bearer sk-sensitive"},

@@ -115,6 +115,7 @@ export interface UsageResponseHeaderMetadata {
     openai_request_id?: string;
     request_id?: string;
     oneapi_request_id?: string;
+    vod_task_id?: string;
     cf_ray?: string;
     eagle_id?: string;
     cloud_ai_companion_trace_id?: string;

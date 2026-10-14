@@ -64,6 +64,7 @@ type HeaderTraceMetadata struct {
 	OpenAIRequestID         string `json:"openai_request_id,omitempty"`
 	RequestID               string `json:"request_id,omitempty"`
 	OneAPIRequestID         string `json:"oneapi_request_id,omitempty"`
+	VODTaskID               string `json:"vod_task_id,omitempty"`
 	CFRay                   string `json:"cf_ray,omitempty"`
 	EagleID                 string `json:"eagle_id,omitempty"`
 	CloudAICompanionTraceID string `json:"cloud_ai_companion_trace_id,omitempty"`
@@ -128,6 +129,8 @@ type ResponseHeaderDerived struct {
 const maxResponseHeaderMetadataValueBytes = 1024
 
 var traceparentPattern = regexp.MustCompile(`^[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$`)
+
+var vodTaskIDPattern = regexp.MustCompile(`^tsk-[0-9A-Za-z]{8,64}$`)
 
 func ParseResponseHeaderMetadata(raw any, base time.Time) *ResponseHeaderMetadata {
 	headers := normalizeResponseHeaders(raw)
@@ -381,10 +384,12 @@ func sanitizeResponseHeaderMetadata(metadata *ResponseHeaderMetadata) {
 		}
 	}
 	if metadata.Trace != nil {
-		metadata.Trace.PrimaryTraceID = normalizeHeaderValue(metadata.Trace.PrimaryTraceID)
+		// The primary id may be a VOD task id, which the generic scrubber would redact.
+		metadata.Trace.PrimaryTraceID = normalizeVODTaskID(metadata.Trace.PrimaryTraceID)
 		metadata.Trace.OpenAIRequestID = normalizeHeaderValue(metadata.Trace.OpenAIRequestID)
 		metadata.Trace.RequestID = normalizeHeaderValue(metadata.Trace.RequestID)
 		metadata.Trace.OneAPIRequestID = normalizeHeaderValue(metadata.Trace.OneAPIRequestID)
+		metadata.Trace.VODTaskID = normalizeVODTaskID(metadata.Trace.VODTaskID)
 		metadata.Trace.CFRay = normalizeHeaderValue(metadata.Trace.CFRay)
 		metadata.Trace.EagleID = normalizeHeaderValue(metadata.Trace.EagleID)
 		metadata.Trace.CloudAICompanionTraceID = normalizeHeaderValue(metadata.Trace.CloudAICompanionTraceID)
@@ -396,6 +401,7 @@ func sanitizeResponseHeaderMetadata(metadata *ResponseHeaderMetadata) {
 			metadata.Trace.OpenAIRequestID,
 			metadata.Trace.RequestID,
 			metadata.Trace.OneAPIRequestID,
+			metadata.Trace.VODTaskID,
 			metadata.Trace.CloudAICompanionTraceID,
 			metadata.Trace.CFRay,
 			metadata.Trace.EagleID,
@@ -557,6 +563,7 @@ func isResponseHeaderAllowed(key string) bool {
 		"x-oai-request-id",
 		"x-request-id",
 		"x-oneapi-request-id",
+		"x-vod-task-id",
 		"cf-ray",
 		"eagleid",
 		"x-cloudaicompanion-trace-id",
@@ -748,6 +755,7 @@ func parseTraceHeaders(headers map[string][]string) *HeaderTraceMetadata {
 		OpenAIRequestID:         normalizeHeaderValue(headerFirst(headers, "x-oai-request-id")),
 		RequestID:               normalizeHeaderValue(headerFirst(headers, "x-request-id")),
 		OneAPIRequestID:         normalizeHeaderValue(headerFirst(headers, "x-oneapi-request-id")),
+		VODTaskID:               normalizeVODTaskID(headerFirst(headers, "x-vod-task-id")),
 		CFRay:                   normalizeHeaderValue(headerFirst(headers, "cf-ray")),
 		EagleID:                 normalizeHeaderValue(headerFirst(headers, "eagleid")),
 		CloudAICompanionTraceID: normalizeHeaderValue(headerFirst(headers, "x-cloudaicompanion-trace-id")),
@@ -759,6 +767,7 @@ func parseTraceHeaders(headers map[string][]string) *HeaderTraceMetadata {
 		trace.OpenAIRequestID,
 		trace.RequestID,
 		trace.OneAPIRequestID,
+		trace.VODTaskID,
 		trace.CloudAICompanionTraceID,
 		trace.CFRay,
 		trace.EagleID,
@@ -875,6 +884,17 @@ func normalizeHeaderValue(value string) string {
 		return ""
 	}
 	return truncateUTF8Bytes(FailSummaryFromBody(trimmed), maxResponseHeaderMetadataValueBytes)
+}
+
+// normalizeVODTaskID keeps Baidu VOD task ids ("tsk-...") intact. The generic
+// secret scrubber treats the embedded "sk-" as an API key, so only values that
+// match the task id format bypass it; everything else is scrubbed as usual.
+func normalizeVODTaskID(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if vodTaskIDPattern.MatchString(trimmed) {
+		return trimmed
+	}
+	return normalizeHeaderValue(trimmed)
 }
 
 func normalizeTraceparent(value string) string {
@@ -1270,6 +1290,7 @@ func (t *HeaderTraceMetadata) isEmpty() bool {
 			t.OpenAIRequestID == "" &&
 			t.RequestID == "" &&
 			t.OneAPIRequestID == "" &&
+			t.VODTaskID == "" &&
 			t.CFRay == "" &&
 			t.EagleID == "" &&
 			t.CloudAICompanionTraceID == "" &&
