@@ -70,6 +70,7 @@ import {
   normalizePlanType,
   normalizeStringValue,
   parseAntigravityPayload,
+  parseAntigravityValidationUrl,
   parseClaudeUsagePayload,
   parseCodexUsagePayload,
   parseKimiUsagePayload,
@@ -274,6 +275,7 @@ export const fetchAntigravityQuota = async (
   let priorityStatus: number | undefined;
   let hadSuccess = false;
   let quotaInventoryObserved = false;
+  let validationUrl: string | null = null;
 
   for (const url of [...ANTIGRAVITY_QUOTA_SUMMARY_URLS, ...ANTIGRAVITY_AVAILABLE_MODELS_URLS]) {
     try {
@@ -294,6 +296,7 @@ export const fetchAntigravityQuota = async (
         if (result.statusCode === 403 || result.statusCode === 404) {
           priorityStatus ??= result.statusCode;
         }
+        validationUrl ??= parseAntigravityValidationUrl(result.body ?? result.bodyText);
         continue;
       }
 
@@ -340,7 +343,14 @@ export const fetchAntigravityQuota = async (
     };
   }
 
-  throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
+  const error = createStatusError(
+    lastError || t('common.unknown_error'),
+    priorityStatus ?? lastStatus
+  );
+  if (validationUrl) {
+    throw Object.assign(error, { validationUrl });
+  }
+  throw error;
 };
 
 export const buildCodexQuotaWindows = (

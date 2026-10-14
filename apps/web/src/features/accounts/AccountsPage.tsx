@@ -22,6 +22,7 @@ import {
   IconCopy,
   IconDollarSign,
   IconDownload,
+  IconExternalLink,
   IconEye,
   IconEyeOff,
   IconFileText,
@@ -271,6 +272,7 @@ import {
 } from '@/features/accounts/components';
 import {
   accountQuotaSnapshotApi,
+  authFilesApi,
   consumeCodexRateLimitResetCredit,
   monitoringAnalyticsApi,
   usageServiceApi,
@@ -341,6 +343,8 @@ const MAX_CONCURRENT_QUOTA_REFRESHES_PER_PROVIDER = 1;
 const MAX_CONCURRENT_QUOTA_REFRESH_PROVIDERS = 3;
 const MAX_CONCURRENT_ACCOUNT_HISTORY_REQUESTS = 2;
 const PASSIVE_ACCOUNTS_EVIDENCE_REFRESH_MS = 60_000;
+const ANTIGRAVITY_UNLOCK_POLL_INTERVAL_MS = 10_000;
+const ANTIGRAVITY_UNLOCK_MAX_POLLS = 60;
 const CREDENTIAL_EVIDENCE_UNIQUE_FILE_NAME_BOUNDARY_PREFIX = 'unique-file-name\u0000';
 const CREDENTIAL_EVIDENCE_SOURCE_FILE_BOUNDARY_PREFIX = 'source-file\u0000';
 const CREDENTIAL_EVIDENCE_PROVIDER_BOUNDARY_PREFIX = 'provider\u0000';
@@ -922,7 +926,9 @@ async function refreshQuotaWithConfig<TState, TData>({
             message,
             Number.isFinite(status) ? status : undefined,
             file,
-            previousState
+            previousState,
+            undefined,
+            error
           ),
         };
       });
@@ -1155,6 +1161,9 @@ export function AccountsPage() {
   const [resettingQuotaKeys, setResettingQuotaKeys] = useState<ReadonlySet<string>>(
     () => new Set()
   );
+  const [antigravityUnlockKeys, setAntigravityUnlockKeys] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   const [accountActionCandidates, setAccountActionCandidates] = useState<AccountActionCandidate[]>(
     []
   );
@@ -1364,6 +1373,7 @@ export function AccountsPage() {
   const pendingExternalHashNavigationRef = useRef('');
   const quotaRequestVersionsRef = useRef<Map<string, number>>(new Map());
   const resettingQuotaKeysRef = useRef<Set<string>>(new Set());
+  const antigravityUnlockKeysRef = useRef<Set<string>>(new Set());
   const identityCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accountSortDropdownRef = useRef<HTMLDivElement | null>(null);
   const accountSortTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -5595,6 +5605,71 @@ export function AccountsPage() {
     [refreshQuotaRows]
   );
 
+  const getAntigravityValidationUrl = (row: AccountRow): string | null => {
+    if (row.provider !== ANTIGRAVITY_CONFIG.type) return null;
+    const state = getCredentialScopedQuotaState(antigravityQuota, row.raw);
+    return state?.status === 'error' ? (state.validationUrl ?? null) : null;
+  };
+
+  // Opens Google's account verification link, then polls the account's quota
+  // until verification takes effect and clears CPA's cooldown for it.
+  const startAntigravityUnlock = useCallback(
+    (row: AccountRow, validationUrl: string) => {
+      window.open(validationUrl, '_blank', 'noopener,noreferrer');
+      const unlockKey = row.selectionKey;
+      if (antigravityUnlockKeysRef.current.has(unlockKey)) return;
+      antigravityUnlockKeysRef.current.add(unlockKey);
+      setAntigravityUnlockKeys((prev) => new Set(prev).add(unlockKey));
+      const displayName = getDisplayAccount(row);
+      void (async () => {
+        try {
+          for (let attempt = 0; attempt < ANTIGRAVITY_UNLOCK_MAX_POLLS; attempt += 1) {
+            await new Promise((resolve) =>
+              window.setTimeout(resolve, ANTIGRAVITY_UNLOCK_POLL_INTERVAL_MS)
+            );
+            if (!isMountedRef.current) return;
+            if (!(await refreshQuotaForRow(row))) continue;
+            const authIndex = normalizeAuthIndex(row.raw['auth_index'] ?? row.raw.authIndex);
+            if (authIndex) {
+              await authFilesApi.resetQuota(authIndex, authFilesRequestScope);
+            }
+            if (isMountedRef.current) {
+              showNotification(
+                t('antigravity_quota.unlock_success', { name: displayName }),
+                'success'
+              );
+            }
+            return;
+          }
+          if (isMountedRef.current) {
+            showNotification(
+              t('antigravity_quota.unlock_timeout', { name: displayName }),
+              'warning'
+            );
+          }
+        } catch (err: unknown) {
+          if (isMountedRef.current) {
+            const message = err instanceof Error ? err.message : t('common.unknown_error');
+            showNotification(
+              `${t('antigravity_quota.unlock_failed', { name: displayName })}: ${message}`,
+              'error'
+            );
+          }
+        } finally {
+          antigravityUnlockKeysRef.current.delete(unlockKey);
+          if (isMountedRef.current) {
+            setAntigravityUnlockKeys((prev) => {
+              const next = new Set(prev);
+              next.delete(unlockKey);
+              return next;
+            });
+          }
+        }
+      })();
+    },
+    [authFilesRequestScope, getDisplayAccount, refreshQuotaForRow, showNotification, t]
+  );
+
   const refreshAccountHistory = useCallback(
     (row: AccountRow): Promise<void> => {
       if (!requestHistoryAvailable) return Promise.resolve();
@@ -6725,107 +6800,129 @@ export function AccountsPage() {
     return typeof document === 'undefined' ? content : createPortal(content, document.body);
   };
 
-  const renderRowActions = (row: AccountRow, needsReauth = false) => (
-    <div className={styles.rowActions} onClick={(event) => event.stopPropagation()}>
-      <div className={styles.accountQuickActionsGrid}>
-        {needsReauth ? (
+  const renderRowActions = (row: AccountRow, needsReauth = false) => {
+    const antigravityValidationUrl = getAntigravityValidationUrl(row);
+    const antigravityUnlocking = antigravityUnlockKeys.has(row.selectionKey);
+    return (
+      <div className={styles.rowActions} onClick={(event) => event.stopPropagation()}>
+        <div className={styles.accountQuickActionsGrid}>
+          {antigravityValidationUrl ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              iconOnly
+              className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
+              onClick={() => startAntigravityUnlock(row, antigravityValidationUrl)}
+              disabled={row.runtimeOnly}
+              title={
+                antigravityUnlocking
+                  ? t('antigravity_quota.unlock_waiting')
+                  : t('antigravity_quota.unlock_action')
+              }
+              aria-label={t('antigravity_quota.unlock_action')}
+            >
+              {antigravityUnlocking ? <LoadingSpinner size={14} /> : <IconExternalLink size={15} />}
+            </Button>
+          ) : null}
+          {needsReauth ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              iconOnly
+              className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
+              onClick={() => handleReauthAccount(row.raw)}
+              disabled={disableControls || row.runtimeOnly}
+              title={t('accounts.recommend_action_reauth')}
+              aria-label={t('accounts.recommend_action_reauth')}
+            >
+              <IconShield size={15} />
+            </Button>
+          ) : null}
           <Button
             variant="secondary"
             size="sm"
             iconOnly
             className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
-            onClick={() => handleReauthAccount(row.raw)}
-            disabled={disableControls || row.runtimeOnly}
-            title={t('accounts.recommend_action_reauth')}
-            aria-label={t('accounts.recommend_action_reauth')}
+            onClick={() => void refreshAccountQuota(row)}
+            disabled={disableControls || quotaRefreshing || row.runtimeOnly}
+            title={t('accounts.refresh_quota')}
+            aria-label={t('accounts.refresh_quota')}
           >
-            <IconShield size={15} />
+            <IconRefreshCw size={15} />
           </Button>
-        ) : null}
-        <Button
-          variant="secondary"
-          size="sm"
-          iconOnly
-          className={`${styles.accountIconButton} ${styles.accountIconButtonRefresh}`}
-          onClick={() => void refreshAccountQuota(row)}
-          disabled={disableControls || quotaRefreshing || row.runtimeOnly}
-          title={t('accounts.refresh_quota')}
-          aria-label={t('accounts.refresh_quota')}
-        >
-          <IconRefreshCw size={15} />
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          iconOnly
-          className={`${styles.accountIconButton} ${styles.accountIconButtonSettings}`}
-          onClick={() => void openAccountDetail(row, 'config')}
-          disabled={row.runtimeOnly}
-          title={t('accounts.detail_tab_config')}
-          aria-label={t('accounts.detail_tab_config')}
-        >
-          <IconSettings size={15} />
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          iconOnly
-          className={`${styles.accountIconButton} ${styles.accountIconButtonModels}`}
-          onClick={() => void openAccountDetail(row, 'models')}
-          disabled={row.runtimeOnly && row.provider !== 'aistudio'}
-          title={t('auth_files.models_button')}
-          aria-label={t('auth_files.models_button')}
-        >
-          <IconModelCluster size={15} />
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          iconOnly
-          className={`${styles.accountIconButton} ${styles.accountIconButtonDownload}`}
-          onClick={() => void handleDownload(row.fileName)}
-          disabled={row.runtimeOnly}
-          title={t('auth_files.download_button')}
-          aria-label={t('auth_files.download_button')}
-        >
-          <IconDownload size={15} />
-        </Button>
-        <Button
-          variant="danger"
-          size="sm"
-          iconOnly
-          className={`${styles.accountIconButton} ${styles.accountIconButtonDelete}`}
-          onClick={() => void handleAccountDelete(row.raw)}
-          disabled={disableControls || row.runtimeOnly || deleting === row.fileName}
-          title={t('auth_files.delete_button')}
-          aria-label={t('auth_files.delete_button')}
-        >
-          {deleting === row.fileName ? <LoadingSpinner size={14} /> : <IconTrash2 size={15} />}
-        </Button>
-      </div>
-      <span className={styles.accountActionsDivider} aria-hidden="true" />
-      <div className={styles.accountSideActions}>
-        <div className={styles.accountStatusSwitch}>
-          <ToggleSwitch
-            checked={!row.disabled}
-            onChange={(enabled) => void handleBatchStatus(enabled, [row])}
-            disabled={disableControls || statusUpdating || row.runtimeOnly}
-            ariaLabel={t('auth_files.status_toggle_label')}
-          />
+          <Button
+            variant="secondary"
+            size="sm"
+            iconOnly
+            className={`${styles.accountIconButton} ${styles.accountIconButtonSettings}`}
+            onClick={() => void openAccountDetail(row, 'config')}
+            disabled={row.runtimeOnly}
+            title={t('accounts.detail_tab_config')}
+            aria-label={t('accounts.detail_tab_config')}
+          >
+            <IconSettings size={15} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            iconOnly
+            className={`${styles.accountIconButton} ${styles.accountIconButtonModels}`}
+            onClick={() => void openAccountDetail(row, 'models')}
+            disabled={row.runtimeOnly && row.provider !== 'aistudio'}
+            title={t('auth_files.models_button')}
+            aria-label={t('auth_files.models_button')}
+          >
+            <IconModelCluster size={15} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            iconOnly
+            className={`${styles.accountIconButton} ${styles.accountIconButtonDownload}`}
+            onClick={() => void handleDownload(row.fileName)}
+            disabled={row.runtimeOnly}
+            title={t('auth_files.download_button')}
+            aria-label={t('auth_files.download_button')}
+          >
+            <IconDownload size={15} />
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            iconOnly
+            className={`${styles.accountIconButton} ${styles.accountIconButtonDelete}`}
+            onClick={() => void handleAccountDelete(row.raw)}
+            disabled={disableControls || row.runtimeOnly || deleting === row.fileName}
+            title={t('auth_files.delete_button')}
+            aria-label={t('auth_files.delete_button')}
+          >
+            {deleting === row.fileName ? <LoadingSpinner size={14} /> : <IconTrash2 size={15} />}
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="xs"
-          className={styles.rowDetailButton}
-          onClick={() => void openAccountDetail(row)}
-          title={t('accounts.open_detail', { name: row.fileName })}
-          aria-label={t('accounts.open_detail', { name: row.fileName })}
-        >
-          {t('accounts.open_detail_short')}
-        </Button>
+        <span className={styles.accountActionsDivider} aria-hidden="true" />
+        <div className={styles.accountSideActions}>
+          <div className={styles.accountStatusSwitch}>
+            <ToggleSwitch
+              checked={!row.disabled}
+              onChange={(enabled) => void handleBatchStatus(enabled, [row])}
+              disabled={disableControls || statusUpdating || row.runtimeOnly}
+              ariaLabel={t('auth_files.status_toggle_label')}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="xs"
+            className={styles.rowDetailButton}
+            onClick={() => void openAccountDetail(row)}
+            title={t('accounts.open_detail', { name: row.fileName })}
+            aria-label={t('accounts.open_detail', { name: row.fileName })}
+          >
+            {t('accounts.open_detail_short')}
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderPagination = () => (
     <div className={styles.accountsPagination}>
@@ -7185,7 +7282,9 @@ export function AccountsPage() {
                       })
                     ) : (
                       <span className={styles.quotaEmptyState} data-account-quota-empty="true">
-                        {t('accounts.quota_source_none')}
+                        {getAntigravityValidationUrl(row)
+                          ? t('antigravity_quota.validation_required')
+                          : t('accounts.quota_source_none')}
                       </span>
                     )}
                     {hiddenQuotaWindowCount > 0 ? (

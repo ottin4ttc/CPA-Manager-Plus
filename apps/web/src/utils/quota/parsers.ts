@@ -135,6 +135,31 @@ export function parseAntigravityPayload(payload: unknown): Record<string, unknow
   return parsed;
 }
 
+const ANTIGRAVITY_VALIDATION_URL_PREFIX = 'https://accounts.google.com/';
+
+/**
+ * Extracts the Google account verification link from an Antigravity
+ * 403 VALIDATION_REQUIRED error body. Only accounts.google.com links are
+ * accepted because the link is opened in the operator's browser.
+ */
+export function parseAntigravityValidationUrl(payload: unknown): string | null {
+  const parsed = parseAntigravityPayload(payload);
+  const error = parsed?.error;
+  if (!error || typeof error !== 'object') return null;
+  const details = (error as Record<string, unknown>).details;
+  if (!Array.isArray(details)) return null;
+  for (const detail of details) {
+    if (!detail || typeof detail !== 'object') continue;
+    const record = detail as Record<string, unknown>;
+    if (record.reason !== 'VALIDATION_REQUIRED') continue;
+    const metadata = record.metadata;
+    if (!metadata || typeof metadata !== 'object') continue;
+    const url = normalizeStringValue((metadata as Record<string, unknown>).validation_url);
+    if (url?.startsWith(ANTIGRAVITY_VALIDATION_URL_PREFIX)) return url;
+  }
+  return null;
+}
+
 export function parseClaudeUsagePayload(payload: unknown): ClaudeUsagePayload | null {
   if (payload === undefined || payload === null) return null;
   if (typeof payload === 'string') {

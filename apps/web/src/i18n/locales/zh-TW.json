@@ -1655,7 +1655,13 @@
     "duration_minute": "{{minutes}} 分鐘",
     "duration_less_than_minute": "小於 1 分鐘",
     "refresh_button": "重新整理配額",
-    "fetch_all": "取得全部"
+    "fetch_all": "取得全部",
+    "validation_required": "需要 Google 帳號驗證",
+    "unlock_action": "前往驗證並自動解鎖",
+    "unlock_waiting": "等待驗證完成，每 10 秒檢測一次；可再次點擊重新開啟驗證連結",
+    "unlock_success": "{{name}} 驗證通過，已清除 CPA 冷卻",
+    "unlock_timeout": "{{name}} 10 分鐘內未檢測到驗證完成，可再次點擊驗證按鈕",
+    "unlock_failed": "{{name}} 自動解鎖失敗"
   },
   "antigravity_subscription": {
     "subscription_label": "訂閱",

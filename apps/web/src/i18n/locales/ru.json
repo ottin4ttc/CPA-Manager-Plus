@@ -1661,7 +1661,13 @@
     "duration_minute": "{{minutes}} мин.",
     "duration_less_than_minute": "меньше 1 мин.",
     "refresh_button": "Обновить квоту",
-    "fetch_all": "Получить все"
+    "fetch_all": "Получить все",
+    "validation_required": "Требуется проверка аккаунта Google",
+    "unlock_action": "Пройти проверку и разблокировать",
+    "unlock_waiting": "Ожидание проверки, опрос каждые 10 с; нажмите ещё раз, чтобы снова открыть ссылку",
+    "unlock_success": "{{name}}: проверка пройдена, охлаждение CPA сброшено",
+    "unlock_timeout": "{{name}}: проверка не завершена за 10 минут; нажмите кнопку проверки ещё раз",
+    "unlock_failed": "{{name}}: не удалось разблокировать"
   },
   "antigravity_subscription": {
     "subscription_label": "Подписка",

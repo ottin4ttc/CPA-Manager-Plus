@@ -3523,4 +3523,68 @@ describe('fetchAntigravityQuota', () => {
     expect(result.groups).toEqual([]);
     expect(result.quotaInventoryObserved).toBe(true);
   });
+
+  it('attaches the Google verification link to VALIDATION_REQUIRED failures', async () => {
+    const validationUrl =
+      'https://accounts.google.com/signin/continue?sarp=1&plt=abc&flowName=GlifWebSignIn&authuser';
+    const validationError = (url: string) => ({
+      statusCode: 403,
+      hasStatusCode: true,
+      header: {},
+      bodyText: '',
+      body: {
+        error: {
+          code: 403,
+          message: 'Verify your account to continue.',
+          status: 'PERMISSION_DENIED',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+              reason: 'VALIDATION_REQUIRED',
+              domain: 'cloudcode-pa.googleapis.com',
+              metadata: { validation_url: url },
+            },
+          ],
+        },
+      },
+    });
+    mocks.request
+      .mockResolvedValueOnce(validationError('https://evil.example.com/verify'))
+      .mockResolvedValue(validationError(validationUrl));
+
+    const error = await fetchAntigravityQuota(
+      {
+        name: 'antigravity.json',
+        type: 'antigravity',
+        authIndex: 'ag-1',
+        project_id: 'project-1',
+      },
+      t
+    ).catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ status: 403, validationUrl });
+  });
+
+  it('does not attach a verification link to other failures', async () => {
+    mocks.request.mockResolvedValue({
+      statusCode: 403,
+      hasStatusCode: true,
+      header: {},
+      bodyText: '',
+      body: { error: { code: 403, message: 'Permission denied', status: 'PERMISSION_DENIED' } },
+    });
+
+    const error = await fetchAntigravityQuota(
+      {
+        name: 'antigravity.json',
+        type: 'antigravity',
+        authIndex: 'ag-1',
+        project_id: 'project-1',
+      },
+      t
+    ).catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ status: 403 });
+    expect(error).not.toHaveProperty('validationUrl');
+  });
 });

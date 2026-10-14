@@ -1130,6 +1130,16 @@ export const authFilesApi = {
       : apiClient.patch<AuthFileStatusResponse>('/auth-files/status', payload);
   },
 
+  // Clears CPA's quota/cooldown routing state for one credential.
+  resetQuota: (authIndex: string, requestScope?: AuthFilesApiRequestScope) =>
+    requestScope
+      ? apiClient.post(
+          '/reset-quota',
+          { auth_index: authIndex },
+          createScopedApiRequestConfig(requestScope)
+        )
+      : apiClient.post('/reset-quota', { auth_index: authIndex }),
+
   setVerifiedSourceFileStatus: async (
     target: AuthFileStatusTarget,
     disabled: boolean,

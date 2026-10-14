@@ -1655,7 +1655,13 @@
     "duration_minute": "{{minutes}} 分钟",
     "duration_less_than_minute": "小于 1 分钟",
     "refresh_button": "刷新额度",
-    "fetch_all": "获取全部"
+    "fetch_all": "获取全部",
+    "validation_required": "需要 Google 账号验证",
+    "unlock_action": "去验证并自动解锁",
+    "unlock_waiting": "等待验证完成，每 10 秒检测一次；可再次点击重新打开验证链接",
+    "unlock_success": "{{name}} 验证通过，已清除 CPA 冷却",
+    "unlock_timeout": "{{name}} 10 分钟内未检测到验证完成，可再次点击验证按钮",
+    "unlock_failed": "{{name}} 自动解锁失败"
   },
   "antigravity_subscription": {
     "subscription_label": "订阅",

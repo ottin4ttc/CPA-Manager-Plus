@@ -1657,7 +1657,13 @@
     "duration_minute": "{{minutes}}m",
     "duration_less_than_minute": "<1m",
     "refresh_button": "Refresh Quota",
-    "fetch_all": "Fetch All"
+    "fetch_all": "Fetch All",
+    "validation_required": "Google account verification required",
+    "unlock_action": "Verify and auto-unlock",
+    "unlock_waiting": "Waiting for verification, checking every 10s; click again to reopen the verification link",
+    "unlock_success": "{{name}} verified, CPA cooldown cleared",
+    "unlock_timeout": "{{name}} was not verified within 10 minutes; click the verify button to try again",
+    "unlock_failed": "{{name}} auto-unlock failed"
   },
   "antigravity_subscription": {
     "subscription_label": "Subscription",
