@@ -10,10 +10,19 @@ import (
 )
 
 // projectionCostJoinSQL left-joins the stored event cost onto the projection
-// row, which carries the event id as event_id rather than id. Callers that do
-// not select the cost columns leave the join unused, and SQLite drops an unused
-// left join on a unique key.
+// row, which carries the event id as event_id rather than id.
+// filteredEventSourceSQL adds it only when a select list reads the cost
+// columns: SQLite keeps an unused left join on a unique key once the outer
+// query aggregates, and then looks up one cost row per scanned event. Measured
+// on the 32GB production usage.sqlite for a 7-day cache-hit window: 567k cost
+// lookups in an aggregate that never reads them.
 const projectionCostJoinSQL = "left join " + usageeventcost.Table + " on " + usageeventcost.Table + ".event_id = p.event_id"
+
+// selectsCostColumns reports whether a filteredEventSourceSQL select list
+// reads the joined cost table.
+func selectsCostColumns(selectList string) bool {
+	return strings.Contains(selectList, usageeventcost.Table+".")
+}
 
 // tailRowIDScanMaxEvents bounds the projection tail that daily rollup readers
 // fetch through the event_id range alone. The tail (AfterID, coverage] usually
@@ -66,6 +75,14 @@ func filteredEventSourceSQL(
 	if options.UseAfter && coverageEventID-options.AfterID <= tailRowIDScanMaxEvents {
 		projectionAccess = " not indexed"
 	}
+	projectionCostJoin := ""
+	if selectsCostColumns(projectionSelect) {
+		projectionCostJoin = projectionCostJoinSQL
+	}
+	rawCostJoin := ""
+	if selectsCostColumns(rawSelect) {
+		rawCostJoin = usageeventcost.JoinSQL("e")
+	}
 
 	if options.ProjectionComplete {
 		query := fmt.Sprintf(`select %s
@@ -74,7 +91,7 @@ func filteredEventSourceSQL(
 			where p.event_id <= ? and %s`,
 			projectionSelect,
 			projectionAccess,
-			projectionCostJoinSQL,
+			projectionCostJoin,
 			strings.Join(projectionConditions, " and "),
 		)
 		args := make([]any, 0, len(projectionArgs)+1)
@@ -94,10 +111,10 @@ func filteredEventSourceSQL(
 		where e.id > ? and %s`,
 		projectionSelect,
 		projectionAccess,
-		projectionCostJoinSQL,
+		projectionCostJoin,
 		strings.Join(projectionConditions, " and "),
 		rawSelect,
-		usageeventcost.JoinSQL("e"),
+		rawCostJoin,
 		strings.Join(rawConditions, " and "),
 	)
 	args := make([]any, 0, len(projectionArgs)+len(rawArgs)+2)
