@@ -34,9 +34,11 @@ const (
 	accountHistoryCatchUpLimit = 5000
 	accountRecentRequestLimit  = 10
 	recentWindowMS             = 30 * 60 * 1000
-	// analyticsPrefetchConcurrency limits background analytics reads. The
-	// foreground summary/task path may hold one additional SQLite connection.
-	analyticsPrefetchConcurrency = 2
+	// analyticsPrefetchConcurrency limits the analytics reads one request runs
+	// at once. The request issues every read through its query group, so this
+	// is also its SQLite connection count: three of the pool's four, leaving
+	// one for the collector and other requests.
+	analyticsPrefetchConcurrency = 3
 )
 
 type Service struct {
@@ -1006,19 +1008,62 @@ func (s *Service) analytics(ctx context.Context, req Request) (Response, error) 
 	var apiKeyStats []store.APIKeyModelStat
 	deriveChannelStatsFromAccounts := req.Include.ChannelShare && req.Include.AccountStats
 	needsModelStats := req.Include.Summary || req.Include.ModelShare || req.Include.ModelStats
-	if needsModelStats {
-		if hourlySnapshotAvailable {
-			modelStats = hourlySnapshot.ModelStats
-		} else {
-			modelStats, err = s.modelStats(ctx, filter)
-			if err != nil {
-				return Response{}, err
+	if needsModelStats && hourlySnapshotAvailable {
+		modelStats = hourlySnapshot.ModelStats
+	}
+
+	// Period-over-period comparison reuses the same filter over the
+	// immediately preceding window [FromMS-window, FromMS). Gated behind an
+	// explicit flag so other analytics consumers avoid the extra queries.
+	var prevFilter store.AnalyticsFilter
+	var prevAgg store.Aggregate
+	var prevModelStats []store.ModelStat
+	comparisonRequested := false
+	prevSnapshotAvailable := false
+	if req.Include.Summary && req.Include.SummaryComparison {
+		windowMS := req.ToMS - req.FromMS
+		if prevFrom := req.FromMS - windowMS; prevFrom > 0 {
+			comparisonRequested = true
+			prevFilter = filter
+			prevFilter.FromMS = prevFrom
+			prevFilter.ToMS = req.FromMS
+			if rollupEligible {
+				var prevSnapshot usagehourly.Snapshot
+				prevSnapshot, prevSnapshotAvailable = s.hourlyReader.LoadAnalytics(
+					ctx,
+					prevFilter,
+					granularity,
+					location,
+					false,
+				)
+				if prevSnapshotAvailable {
+					prevAgg = prevSnapshot.Aggregate
+					prevModelStats = prevSnapshot.ModelStats
+				}
 			}
 		}
 	}
 
+	// Every read below runs in the query group, the summary and timeline ones
+	// included, so the response costs about its slowest read rather than the
+	// sum of them. They are submitted heaviest first because the group starts
+	// them in that order.
 	queries := newAnalyticsQueryGroup(ctx, analyticsPrefetchConcurrency)
 	defer queries.Close()
+
+	var businessOutcomeRows []store.BusinessOutcomeHourRow
+	businessOutcomeAvailable := false
+	if req.Include.BusinessOutcome {
+		queries.Go(func(queryCtx context.Context) error {
+			rows, available, queryErr := s.store.BusinessOutcomeTimelineWithFilter(queryCtx, filter)
+			if queryErr != nil {
+				return queryErr
+			}
+			businessOutcomeRows = rows
+			businessOutcomeAvailable = available
+			return nil
+		})
+	}
 
 	// The timeline percentiles and the summary p95 read the exact same latency
 	// samples. When both are requested a single pass produces both instead of
@@ -1028,10 +1073,109 @@ func (s *Service) analytics(ctx context.Context, req Request) (Response, error) 
 	sharedLatencyBreakdown := needsLatencyPercentiles && needsLatencySummary
 
 	var latencyPercentiles []store.LatencyPercentiles
-	if needsLatencyPercentiles && !sharedLatencyBreakdown {
+	var latencySummary store.LatencySummary
+	if sharedLatencyBreakdown {
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			latencySummary, latencyPercentiles, queryErr = s.store.LatencyBreakdownWithFilter(queryCtx, filter, granularity, location)
+			return queryErr
+		})
+	} else if needsLatencyPercentiles {
 		queries.Go(func(queryCtx context.Context) error {
 			var queryErr error
 			latencyPercentiles, queryErr = s.store.LatencyPercentilesWithFilter(queryCtx, filter, granularity, location)
+			return queryErr
+		})
+	} else if needsLatencySummary {
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			latencySummary, queryErr = s.store.LatencySummaryWithFilter(queryCtx, filter)
+			return queryErr
+		})
+	}
+
+	var timelinePoints []store.TimelinePoint
+	if req.Include.Timeline || req.Include.AnomalyPoints {
+		queries.Go(func(queryCtx context.Context) error {
+			pointsAvailable := false
+			if hourlySnapshotAvailable && hourlyTimelineRepresentable {
+				timelinePoints, pointsAvailable = s.hourlyReader.AnalyticsTimeline(queryCtx, hourlySnapshot, granularity, location)
+			}
+			if !pointsAvailable {
+				timelinePoints, pointsAvailable = s.monitoringReader.Timeline(queryCtx, filter, granularity, location)
+			}
+			if !pointsAvailable {
+				var queryErr error
+				timelinePoints, queryErr = s.store.TimelineWithFilter(queryCtx, filter, granularity, location)
+				return queryErr
+			}
+			return nil
+		})
+	}
+
+	if needsModelStats && !hourlySnapshotAvailable {
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			modelStats, queryErr = s.modelStats(queryCtx, filter)
+			return queryErr
+		})
+	}
+
+	var agg store.Aggregate
+	if req.Include.Summary {
+		if hourlySnapshotAvailable {
+			agg = hourlySnapshot.Aggregate
+		} else {
+			queries.Go(func(queryCtx context.Context) error {
+				var queryErr error
+				agg, queryErr = s.aggregate(queryCtx, filter)
+				return queryErr
+			})
+		}
+	}
+
+	if comparisonRequested && !prevSnapshotAvailable {
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			prevAgg, queryErr = s.aggregate(queryCtx, prevFilter)
+			return queryErr
+		})
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			prevModelStats, queryErr = s.modelStats(queryCtx, prevFilter)
+			return queryErr
+		})
+	}
+
+	var taskBuckets []store.TaskBucket
+	if req.Include.TaskBuckets || (req.Include.Summary && !compactSummary) {
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			taskBuckets, queryErr = s.store.TaskBucketsWithFilter(queryCtx, filter)
+			return queryErr
+		})
+	}
+
+	var rollingAgg store.Aggregate
+	var activeDays int64
+	var zeroTokenModels []string
+	if req.Include.Summary && !compactSummary {
+		rollingFilter := filter
+		rollingFilter.FromMS = nowMS - recentWindowMS
+		rollingFilter.ToMS = nowMS
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			rollingAgg, queryErr = s.store.AggregateWithFilter(queryCtx, rollingFilter)
+			return queryErr
+		})
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			activeDays, queryErr = s.store.ActiveDaysWithFilter(queryCtx, filter, location)
+			return queryErr
+		})
+		queries.Go(func(queryCtx context.Context) error {
+			var queryErr error
+			zeroTokenModels, queryErr = s.store.ZeroTokenModelsWithFilter(queryCtx, filter)
 			return queryErr
 		})
 	}
@@ -1068,20 +1212,6 @@ func (s *Service) analytics(ctx context.Context, req Request) (Response, error) 
 			var queryErr error
 			failureSourceStats, queryErr = s.store.FailureSourcesWithFilter(queryCtx, filter)
 			return queryErr
-		})
-	}
-
-	var businessOutcomeRows []store.BusinessOutcomeHourRow
-	businessOutcomeAvailable := false
-	if req.Include.BusinessOutcome {
-		queries.Go(func(queryCtx context.Context) error {
-			rows, available, queryErr := s.store.BusinessOutcomeTimelineWithFilter(queryCtx, filter)
-			if queryErr != nil {
-				return queryErr
-			}
-			businessOutcomeRows = rows
-			businessOutcomeAvailable = available
-			return nil
 		})
 	}
 
@@ -1198,55 +1328,10 @@ func (s *Service) analytics(ctx context.Context, req Request) (Response, error) 
 		})
 	}
 
-	var taskBuckets []store.TaskBucket
-	if req.Include.TaskBuckets || (req.Include.Summary && !compactSummary) {
-		taskBuckets, err = s.store.TaskBucketsWithFilter(ctx, filter)
-		if err != nil {
-			return Response{}, err
-		}
+	if err := queries.Wait(); err != nil {
+		return Response{}, err
 	}
-
 	if req.Include.Summary {
-		var agg store.Aggregate
-		if hourlySnapshotAvailable {
-			agg = hourlySnapshot.Aggregate
-		} else {
-			agg, err = s.aggregate(ctx, filter)
-			if err != nil {
-				return Response{}, err
-			}
-		}
-		var latencySummary store.LatencySummary
-		if needsLatencySummary {
-			if sharedLatencyBreakdown {
-				latencySummary, latencyPercentiles, err = s.store.LatencyBreakdownWithFilter(ctx, filter, granularity, location)
-			} else {
-				latencySummary, err = s.store.LatencySummaryWithFilter(ctx, filter)
-			}
-			if err != nil {
-				return Response{}, err
-			}
-		}
-		var rollingAgg store.Aggregate
-		var activeDays int64
-		var zeroTokenModels []string
-		if !compactSummary {
-			rollingFilter := filter
-			rollingFilter.FromMS = nowMS - recentWindowMS
-			rollingFilter.ToMS = nowMS
-			rollingAgg, err = s.store.AggregateWithFilter(ctx, rollingFilter)
-			if err != nil {
-				return Response{}, err
-			}
-			activeDays, err = s.store.ActiveDaysWithFilter(ctx, filter, location)
-			if err != nil {
-				return Response{}, err
-			}
-			zeroTokenModels, err = s.store.ZeroTokenModelsWithFilter(ctx, filter)
-			if err != nil {
-				return Response{}, err
-			}
-		}
 		summaryTaskBuckets := taskBuckets
 		if compactSummary {
 			summaryTaskBuckets = nil
@@ -1257,79 +1342,26 @@ func (s *Service) analytics(ctx context.Context, req Request) (Response, error) 
 		}
 		summaryTotalCalls = agg.TotalCalls
 		summaryComputed = true
-
-		// Period-over-period comparison reuses the same filter over the
-		// immediately preceding window [FromMS-window, FromMS). Gated behind an
-		// explicit flag so other analytics consumers avoid the extra queries.
-		if req.Include.SummaryComparison {
-			windowMS := req.ToMS - req.FromMS
-			if prevFrom := req.FromMS - windowMS; prevFrom > 0 {
-				prevFilter := filter
-				prevFilter.FromMS = prevFrom
-				prevFilter.ToMS = req.FromMS
-				var prevAgg store.Aggregate
-				var prevModelStats []store.ModelStat
-				var prevSnapshot usagehourly.Snapshot
-				prevSnapshotAvailable := false
-				if rollupEligible {
-					prevSnapshot, prevSnapshotAvailable = s.hourlyReader.LoadAnalytics(
-						ctx,
-						prevFilter,
-						granularity,
-						location,
-						false,
-					)
-				}
-				if prevSnapshotAvailable {
-					prevAgg = prevSnapshot.Aggregate
-					prevModelStats = prevSnapshot.ModelStats
-				} else {
-					prevAgg, err = s.aggregate(ctx, prevFilter)
-					if err != nil {
-						return Response{}, err
-					}
-					prevModelStats, err = s.modelStats(ctx, prevFilter)
-					if err != nil {
-						return Response{}, err
-					}
-				}
-				response.SummaryComparison = &SummaryComparison{
-					FromMS:       prevFrom,
-					ToMS:         req.FromMS,
-					TotalCalls:   prevAgg.TotalCalls,
-					SuccessCalls: prevAgg.SuccessCalls,
-					FailureCalls: prevAgg.FailureCalls,
-					SuccessRate:  ratio(prevAgg.SuccessCalls, prevAgg.TotalCalls),
-					TotalTokens:  prevAgg.TotalTokens,
-					TotalCost:    sumCost(prevModelStats, prices),
-					TotalCostCNY: sumCostTotals(prevModelStats).CostCNY(),
-				}
+		if comparisonRequested {
+			response.SummaryComparison = &SummaryComparison{
+				FromMS:       prevFilter.FromMS,
+				ToMS:         prevFilter.ToMS,
+				TotalCalls:   prevAgg.TotalCalls,
+				SuccessCalls: prevAgg.SuccessCalls,
+				FailureCalls: prevAgg.FailureCalls,
+				SuccessRate:  ratio(prevAgg.SuccessCalls, prevAgg.TotalCalls),
+				TotalTokens:  prevAgg.TotalTokens,
+				TotalCost:    sumCost(prevModelStats, prices),
+				TotalCostCNY: sumCostTotals(prevModelStats).CostCNY(),
 			}
 		}
-	}
-	if err := queries.Wait(); err != nil {
-		return Response{}, err
 	}
 	if deriveChannelStatsFromAccounts {
 		channelStats = channelModelStatsFromAccountStats(accountStats)
 	}
 	var timeline []TimelinePoint
 	if req.Include.Timeline || req.Include.AnomalyPoints {
-		var points []store.TimelinePoint
-		pointsAvailable := false
-		if hourlySnapshotAvailable && hourlyTimelineRepresentable {
-			points, pointsAvailable = s.hourlyReader.AnalyticsTimeline(ctx, hourlySnapshot, granularity, location)
-		}
-		if !pointsAvailable {
-			points, pointsAvailable = s.monitoringReader.Timeline(ctx, filter, granularity, location)
-		}
-		if !pointsAvailable {
-			points, err = s.store.TimelineWithFilter(ctx, filter, granularity, location)
-			if err != nil {
-				return Response{}, err
-			}
-		}
-		timeline = buildTimeline(points, latencyPercentiles, granularity, location, prices)
+		timeline = buildTimeline(timelinePoints, latencyPercentiles, granularity, location, prices)
 		if req.Include.Timeline {
 			response.Timeline = timeline
 		}
