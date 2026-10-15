@@ -63,3 +63,48 @@ func TestProjectionTailReadsByEventIDRange(t *testing.T) {
 		t.Fatalf("long projection tail left the scope index: %s", got)
 	}
 }
+
+// The time-led scope index makes a key-scoped read walk every key's events in
+// the window: 10.2s for a 3-key 30-day timeline on production. The key filter
+// must stay seekable so the API-key-led scope index serves it.
+func TestAPIKeyScopedProjectionReadSeeksAPIKeyIndex(t *testing.T) {
+	db, err := sqliterepo.Open(filepath.Join(t.TempDir(), "usage.sqlite"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := sqliterepo.RunDerivedStartupMaintenance(context.Background(), db); err != nil {
+		t.Fatalf("prepare post-listen indexes: %v", err)
+	}
+
+	filter := AnalyticsFilter{
+		FromMS:        1_000,
+		ToMS:          2_000,
+		IncludeFailed: true,
+		APIKeyHashes:  []string{"key-a", "key-b"},
+	}
+	selectList := `p.timestamp_ms, p.analytics_model, p.failed, p.total_tokens, p.latency_ms`
+	query, args := filteredEventSourceSQL(filter, 2_207_400, selectList, selectList,
+		eventSourceOptions{ProjectionComplete: true})
+	rows, err := db.Query(`explain query plan `+query, args...)
+	if err != nil {
+		t.Fatalf("explain key-scoped projection read: %v", err)
+	}
+	defer rows.Close()
+	details := make([]string, 0, 4)
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		if err := rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
+			t.Fatalf("scan query plan: %v", err)
+		}
+		details = append(details, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("query plan rows: %v", err)
+	}
+	seek := "SEARCH p USING COVERING INDEX idx_usage_monitoring_event_projection_api_key_scope (api_key_hash=? AND timestamp_ms>? AND timestamp_ms<?)"
+	if got := strings.Join(details, "\n"); !strings.Contains(got, seek) {
+		t.Fatalf("key-scoped projection read does not seek the API key index: %s", got)
+	}
+}

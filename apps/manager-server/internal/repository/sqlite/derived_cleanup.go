@@ -232,6 +232,22 @@ var derivedIndexStatements = []struct {
 			normalized_total_input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_tokens, cache_read_tokens,
 			cache_creation_tokens, total_tokens, latency_ms)`},
+	// The scope index leads with timestamp_ms, so an API-key-scoped read walks
+	// every key's entries in the window and keeps a few percent of them. Leading
+	// with api_key_hash lets the planner seek each selected key's time range
+	// instead, with the same covered column set. Measured on the 30GB production
+	// usage.sqlite: 3 keys holding 221k of a 30-day window's ~2M events took
+	// 10.2s for the timeline on the time-led index.
+	{"idx_usage_monitoring_event_projection_api_key_scope", "usage_monitoring_event_projection_v1", `create index if not exists idx_usage_monitoring_event_projection_api_key_scope
+		on usage_monitoring_event_projection_v1(
+			api_key_hash, timestamp_ms, auth_index, auth_file_snapshot,
+			source_hash, source, account_snapshot, auth_label_snapshot,
+			provider, auth_provider_snapshot, auth_project_id_snapshot,
+			model, requested_model, analytics_model, resolved_model,
+			service_tier, failed,
+			normalized_total_input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_tokens, cache_read_tokens,
+			cache_creation_tokens, total_tokens, latency_ms)`},
 	// ttft_ms only lives on usage_events, so the p95 readers cannot use the
 	// projection; carry the monitoring filter columns here instead so they scan
 	// the index alone rather than looking up every wide usage_events row.
@@ -251,6 +267,17 @@ var derivedIndexStatements = []struct {
 	{"idx_usage_events_latency_scope_v4", "usage_events", `create index if not exists idx_usage_events_latency_scope_v4
 		on usage_events(
 			timestamp_ms, auth_index, api_key_hash, auth_file_snapshot,
+			source_hash, model, requested_model, latency_ms, ttft_ms,
+			failed, cached_tokens, cache_tokens, cache_read_tokens,
+			cache_creation_tokens, provider, auth_provider_snapshot)`},
+	// The API-key-led twin of the latency scope index, for the same reason as
+	// the projection's api_key_scope: a key-scoped p95 read and business outcome
+	// probe otherwise walk every key's entries in the window. Readers pin it
+	// only when the filter selects API keys. Measured on the 30GB production
+	// usage.sqlite for 3 keys over 30 days: 3.5s (p95) on the time-led index.
+	{"idx_usage_events_api_key_latency_scope", "usage_events", `create index if not exists idx_usage_events_api_key_latency_scope
+		on usage_events(
+			api_key_hash, timestamp_ms, auth_index, auth_file_snapshot,
 			source_hash, model, requested_model, latency_ms, ttft_ms,
 			failed, cached_tokens, cache_tokens, cache_read_tokens,
 			cache_creation_tokens, provider, auth_provider_snapshot)`},

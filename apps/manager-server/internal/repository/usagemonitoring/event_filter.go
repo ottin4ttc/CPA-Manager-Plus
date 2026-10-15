@@ -171,7 +171,13 @@ func eventFilterConditions(filter AnalyticsFilter, prefix string, projected bool
 	addInCondition(credentialExpr, filter.CredentialIDs)
 	addInCondition(column("auth_file_snapshot"), filter.AuthFiles)
 	addInCondition(column("auth_index"), filter.AuthIndices)
-	addInCondition(column("api_key_hash"), filter.APIKeyHashes)
+	// api_key_hash stays bare so the API-key-led scope indexes can seek it;
+	// normalizeFilterValues drops empty values, so coalesce(..., '') could never
+	// match more rows here.
+	if apiKeyHashes := normalizeFilterValues(filter.APIKeyHashes); len(apiKeyHashes) > 0 {
+		conditions = append(conditions, column("api_key_hash")+" in (select value from json_each(?))")
+		args = append(args, encodeJSONFilterValues(apiKeyHashes))
+	}
 	addInCondition(column("source_hash"), filter.SourceHashes)
 	addInCondition(usageidentity.SQLProjectIDSnapshotExpression(prefix), filter.ProjectIDs)
 	addInCondition(column("executor_type"), filter.RequestTypes)

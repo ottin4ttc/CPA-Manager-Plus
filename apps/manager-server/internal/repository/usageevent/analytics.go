@@ -971,7 +971,7 @@ func (r *repository) latencyBreakdown(
 	withSummary bool,
 	withBuckets bool,
 ) (LatencySummary, []LatencyPercentiles, error) {
-	index, err := r.latencyScopeIndex(ctx)
+	index, err := r.latencyScopeIndex(ctx, filter)
 	if err != nil {
 		return LatencySummary{}, nil, err
 	}
@@ -1602,6 +1602,10 @@ const businessOutcomeIndexName = "idx_usage_events_request_outcome"
 const (
 	latencyScopeIndexName       = "idx_usage_events_latency_scope_v4"
 	legacyLatencyScopeIndexName = "idx_usage_events_latency_scope_v3"
+	// apiKeyLatencyScopeIndexName carries the latency scope columns behind
+	// api_key_hash, so key-scoped reads seek each key's window instead of
+	// walking every key's entries.
+	apiKeyLatencyScopeIndexName = "idx_usage_events_api_key_latency_scope"
 )
 
 // businessOutcomeTimelineSQL folds attempts into requests by request_id and
@@ -1747,10 +1751,15 @@ const businessOutcomeInScopeExpr = "n_in = n_all"
 // businessOutcomeMaxExcludedShare cannot trip and the fold stays visible.
 const businessOutcomeBucketInScopeExpr = "n_in > 0"
 
-// latencyScopeIndex returns the newest latency scope index present, or "" when
-// neither has been built yet.
-func (r *repository) latencyScopeIndex(ctx context.Context) (string, error) {
-	for _, name := range []string{latencyScopeIndexName, legacyLatencyScopeIndexName} {
+// latencyScopeIndex returns the latency scope index to pin for filter: the
+// API-key-led one when the filter selects keys, otherwise the newest time-led
+// one present, or "" when none has been built yet.
+func (r *repository) latencyScopeIndex(ctx context.Context, filter AnalyticsFilter) (string, error) {
+	candidates := []string{latencyScopeIndexName, legacyLatencyScopeIndexName}
+	if len(normalizeFilterValues(filter.APIKeyHashes)) > 0 {
+		candidates = append([]string{apiKeyLatencyScopeIndexName}, candidates...)
+	}
+	for _, name := range candidates {
 		var count int
 		if err := r.db.QueryRowContext(ctx,
 			`select count(*) from sqlite_master where type = 'index' and name = ?`,
@@ -1812,7 +1821,7 @@ func (r *repository) BusinessOutcomeTimelineWithFilter(ctx context.Context, filt
 	// The scoped variant also pins the latency scope index for its coverage
 	// probe, and that index is prepared off the startup path too: during an
 	// upgrade window it may not exist yet.
-	probeIndex, err := r.latencyScopeIndex(ctx)
+	probeIndex, err := r.latencyScopeIndex(ctx, filter)
 	if err != nil {
 		return nil, false, err
 	}
@@ -3251,7 +3260,13 @@ func analyticsWhere(filter AnalyticsFilter) (string, []any) {
 	addInCondition(credentialIDExpr, filter.CredentialIDs)
 	addInCondition("auth_file_snapshot", filter.AuthFiles)
 	addInCondition("auth_index", filter.AuthIndices)
-	addInCondition("api_key_hash", filter.APIKeyHashes)
+	// api_key_hash stays bare so idx_usage_events_api_key_latency_scope can seek
+	// it; normalizeFilterValues drops empty values, so coalesce(..., '') could
+	// never match more rows here.
+	if apiKeyHashes := normalizeFilterValues(filter.APIKeyHashes); len(apiKeyHashes) > 0 {
+		conditions = append(conditions, "api_key_hash in (select value from json_each(?))")
+		args = append(args, encodeJSONFilterValues(apiKeyHashes))
+	}
 	addInCondition("source_hash", filter.SourceHashes)
 	addInCondition(usageidentity.SQLProjectIDSnapshotExpression(""), filter.ProjectIDs)
 	addInCondition("executor_type", filter.RequestTypes)
