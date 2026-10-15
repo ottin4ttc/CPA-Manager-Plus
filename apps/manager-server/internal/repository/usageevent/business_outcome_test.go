@@ -234,11 +234,11 @@ func businessOutcomeProviderEvent(hash, requestID string, timestampMS int64, aut
 }
 
 // The usage analytics provider filter must keep the business error rate, also
-// while only v3 of the latency scope index exists: v4 ships through the
-// offline cleanup-derived command, so a freshly deployed server still probes
-// through v3 (paying wide-row lookups for the provider condition).
+// while only v3 of the latency scope index exists: newer versions ship through
+// the offline cleanup-derived command, so a freshly deployed server still
+// probes through v3 (paying wide-row lookups for the provider condition).
 func TestBusinessOutcomeScopedFilterByProvider(t *testing.T) {
-	for name, legacyIndexOnly := range map[string]bool{"v4": false, "v3 fallback": true} {
+	for name, legacyIndexOnly := range map[string]bool{"v5": false, "v3 fallback": true} {
 		db, err := sqliterepo.Open(filepath.Join(t.TempDir(), "usage.sqlite"))
 		if err != nil {
 			t.Fatalf("%s: open database: %v", name, err)
@@ -534,6 +534,164 @@ func TestBusinessOutcomeScopedQueryStaysOnCoveringIndexes(t *testing.T) {
 		if !coversFold || !coversProbe || rowLookup {
 			t.Fatalf("%s: scoped business outcome query left its covering indexes: %v", name, details)
 		}
+	}
+}
+
+func TestBusinessOutcomeSeekQueryStaysOnCoveringIndexes(t *testing.T) {
+	db, err := sqliterepo.Open(filepath.Join(t.TempDir(), "usage.sqlite"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := sqliterepo.RunDerivedStartupMaintenance(context.Background(), db); err != nil {
+		t.Fatalf("prepare post-listen indexes: %v", err)
+	}
+
+	accountFilter := businessOutcomeTimeFilter(1_000, 2_000)
+	accountFilter.AuthIndices = []string{"auth-1"}
+	providerFilter := businessOutcomeTimeFilter(1_000, 2_000)
+	providerFilter.Providers = []string{"codex"}
+	keyFilter := businessOutcomeTimeFilter(1_000, 2_000)
+	keyFilter.APIKeyHashes = []string{"key-1"}
+	for name, test := range map[string]struct {
+		filter AnalyticsFilter
+		index  string
+	}{
+		"auth indices": {accountFilter, latencyScopeIndexName},
+		"provider":     {providerFilter, latencyScopeIndexName},
+		"api key":      {keyFilter, apiKeyLatencyScopeIndexName},
+	} {
+		where, whereArgs := analyticsWhere(test.filter)
+		args := append(whereArgs, test.filter.FromMS, test.filter.ToMS)
+		rows, err := db.Query(`explain query plan `+fmt.Sprintf(businessOutcomeSeekTimelineSQL, businessOutcomeInScopeExpr, where, test.index), args...)
+		if err != nil {
+			t.Fatalf("%s: explain seek business outcome query: %v", name, err)
+		}
+
+		details := make([]string, 0, 8)
+		coversScope := false
+		seeksRequests := false
+		rowLookup := false
+		for rows.Next() {
+			var id, parent, notUsed int
+			var detail string
+			if err := rows.Scan(&id, &parent, &notUsed, &detail); err != nil {
+				rows.Close()
+				t.Fatalf("%s: scan query plan: %v", name, err)
+			}
+			details = append(details, detail)
+			coversScope = coversScope || strings.Contains(detail, "COVERING INDEX "+test.index)
+			seeksRequests = seeksRequests || strings.Contains(detail, "COVERING INDEX "+businessOutcomeRequestIndexName+" (request_id=?")
+			rowLookup = rowLookup ||
+				(strings.Contains(detail, " USING INDEX ") && !strings.Contains(detail, "COVERING")) ||
+				strings.Contains(detail, "SCAN usage_events") ||
+				strings.Contains(detail, "SCAN e")
+		}
+		queryErr := rows.Err()
+		rows.Close()
+		if queryErr != nil {
+			t.Fatalf("%s: query plan rows: %v", name, queryErr)
+		}
+		if !coversScope || !seeksRequests || rowLookup {
+			t.Fatalf("%s: seek business outcome query left its covering indexes: %v", name, details)
+		}
+	}
+}
+
+// The seek fold only skips requests the window fold would drop by n_in = 0, so
+// both must report the same rows for every scope, including retries that hop
+// out of the scope, attempts just outside the window and events without a
+// request_id.
+func TestBusinessOutcomeSeekFoldMatchesWindowFold(t *testing.T) {
+	hourA := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).UnixMilli()
+	hourB := hourA + 3_600_000
+	events := []usage.Event{
+		// Rescued inside one account and model.
+		businessOutcomeScopedEvent("eq-r1-a1", "r1", hourA+10_000, "auth-1", "gpt-x", true),
+		businessOutcomeScopedEvent("eq-r1-a2", "r1", hourA+20_000, "auth-1", "gpt-x", false),
+		// Retry hops accounts and providers: split for auth-1 and codex.
+		businessOutcomeProviderEvent("eq-r2-a1", "r2", hourA+30_000, "auth-1", "codex", true),
+		businessOutcomeProviderEvent("eq-r2-a2", "r2", hourA+40_000, "auth-2", "claude", false),
+		// Retry hops models across the hour boundary.
+		businessOutcomeScopedEvent("eq-r3-a1", "r3", hourB-5_000, "auth-2", "gpt-x", true),
+		businessOutcomeScopedEvent("eq-r3-a2", "r3", hourB+5_000, "auth-2", "gpt-y", true),
+		// First attempt before the window: only the in-window attempt folds.
+		businessOutcomeScopedEvent("eq-r4-a1", "r4", hourA-5_000, "auth-1", "gpt-x", true),
+		businessOutcomeScopedEvent("eq-r4-a2", "r4", hourA+50_000, "auth-1", "gpt-x", false),
+		// Events without a request_id are single-attempt requests.
+		businessOutcomeScopedEvent("eq-solo-1", "", hourA+60_000, "auth-1", "gpt-x", true),
+		businessOutcomeScopedEvent("eq-solo-2", "", hourB+60_000, "auth-2", "gpt-y", false),
+		bucketScopeEvent("eq-r5-a1", "r5", "auth-3", hourB+70_000, true),
+		bucketScopeEvent("eq-r5-a2", "r5", "auth-1", hourB+80_000, false),
+	}
+	// Enough rescued retries inside auth-1/codex/gpt-x that the splits above
+	// stay under businessOutcomeMaxExcludedShare and those folds stay visible.
+	for i := 0; i < 50; i++ {
+		requestID := fmt.Sprintf("clean-%d", i)
+		timestampMS := hourA + 100_000 + int64(i)*60_000
+		events = append(events,
+			businessOutcomeProviderEvent(requestID+"-a1", requestID, timestampMS, "auth-1", "codex", true),
+			businessOutcomeProviderEvent(requestID+"-a2", requestID, timestampMS+1_000, "auth-1", "codex", false),
+		)
+	}
+	filters := map[string]AnalyticsFilter{}
+	for name, mutate := range map[string]func(*AnalyticsFilter){
+		"auth-1":   func(f *AnalyticsFilter) { f.AuthIndices = []string{"auth-1"} },
+		"auth-2":   func(f *AnalyticsFilter) { f.AuthIndices = []string{"auth-2"} },
+		"codex":    func(f *AnalyticsFilter) { f.Providers = []string{"codex"} },
+		"gpt-x":    func(f *AnalyticsFilter) { f.Models = []string{"gpt-x"} },
+		"bucket-1": func(f *AnalyticsFilter) { f.AuthIndices = []string{"auth-1"}; f.BucketScope = true },
+		"bucket-3": func(f *AnalyticsFilter) { f.AuthIndices = []string{"auth-3"}; f.BucketScope = true },
+	} {
+		filter := businessOutcomeTimeFilter(hourA, hourB+3_600_000)
+		mutate(&filter)
+		filters[name] = filter
+	}
+
+	type outcome struct {
+		rows      []BusinessOutcomeHourRow
+		available bool
+	}
+	results := map[string]map[string]outcome{}
+	for _, mode := range []string{"seek", "window"} {
+		db, err := sqliterepo.Open(filepath.Join(t.TempDir(), "usage.sqlite"))
+		if err != nil {
+			t.Fatalf("%s: open database: %v", mode, err)
+		}
+		t.Cleanup(func() { _ = db.Close() })
+		if err := sqliterepo.RunDerivedStartupMaintenance(context.Background(), db); err != nil {
+			t.Fatalf("%s: prepare post-listen indexes: %v", mode, err)
+		}
+		if mode == "window" {
+			if _, err := db.Exec(`drop index ` + businessOutcomeRequestIndexName); err != nil {
+				t.Fatalf("drop request attempts index: %v", err)
+			}
+		}
+		repo := New(db)
+		if _, err := repo.InsertBatch(context.Background(), events); err != nil {
+			t.Fatalf("%s: insert events: %v", mode, err)
+		}
+		results[mode] = map[string]outcome{}
+		for name, filter := range filters {
+			rows, available, err := repo.BusinessOutcomeTimelineWithFilter(context.Background(), filter)
+			if err != nil {
+				t.Fatalf("%s %s: business outcome: %v", mode, name, err)
+			}
+			results[mode][name] = outcome{rows: rows, available: available}
+		}
+	}
+	folded := 0
+	for name := range filters {
+		seek, window := results["seek"][name], results["window"][name]
+		if fmt.Sprint(seek) != fmt.Sprint(window) {
+			t.Fatalf("%s: seek fold = %+v, window fold = %+v", name, seek, window)
+		}
+		if seek.available && len(seek.rows) > 0 {
+			folded++
+		}
+	}
+	if folded < len(filters)/2 {
+		t.Fatalf("only %d of %d scopes folded any request, the fixture no longer exercises the fold: %+v", folded, len(filters), results["seek"])
 	}
 }
 

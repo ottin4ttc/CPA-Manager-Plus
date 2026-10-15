@@ -124,7 +124,6 @@ var derivedIndexStatements = []struct {
 	sql       string
 }{
 	{"idx_usage_events_timestamp", "usage_events", `create index if not exists idx_usage_events_timestamp on usage_events(timestamp_ms)`},
-	{"idx_usage_events_request_id", "usage_events", `create index if not exists idx_usage_events_request_id on usage_events(request_id)`},
 	{"idx_usage_events_model", "usage_events", `create index if not exists idx_usage_events_model on usage_events(model)`},
 	{"idx_usage_events_auth_index", "usage_events", `create index if not exists idx_usage_events_auth_index on usage_events(auth_index)`},
 	{"idx_usage_events_endpoint", "usage_events", `create index if not exists idx_usage_events_endpoint on usage_events(endpoint)`},
@@ -222,7 +221,11 @@ var derivedIndexStatements = []struct {
 	// covering the scan: every row then falls back to the wide projection row,
 	// whose kilobyte search_text sits early enough to drag in its overflow pages.
 	// Measured on a 945k-row projection: 0.07s covered vs 39s uncovered.
-	{"idx_usage_monitoring_event_projection_scope_v2", "usage_monitoring_event_projection_v1", `create index if not exists idx_usage_monitoring_event_projection_scope_v2
+	// v3 appends auth_account_id_snapshot, which the account and API key stats
+	// select: without it every window those reads scan off the daily rollups
+	// (cache status or minimum latency filters, partial-day edges) looked up
+	// the wide projection row per event.
+	{"idx_usage_monitoring_event_projection_scope_v3", "usage_monitoring_event_projection_v1", `create index if not exists idx_usage_monitoring_event_projection_scope_v3
 		on usage_monitoring_event_projection_v1(
 			timestamp_ms, api_key_hash, auth_index, auth_file_snapshot,
 			source_hash, source, account_snapshot, auth_label_snapshot,
@@ -231,14 +234,15 @@ var derivedIndexStatements = []struct {
 			service_tier, failed,
 			normalized_total_input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_tokens, cache_read_tokens,
-			cache_creation_tokens, total_tokens, latency_ms)`},
+			cache_creation_tokens, total_tokens, latency_ms,
+			auth_account_id_snapshot)`},
 	// The scope index leads with timestamp_ms, so an API-key-scoped read walks
 	// every key's entries in the window and keeps a few percent of them. Leading
 	// with api_key_hash lets the planner seek each selected key's time range
 	// instead, with the same covered column set. Measured on the 30GB production
 	// usage.sqlite: 3 keys holding 221k of a 30-day window's ~2M events took
-	// 10.2s for the timeline on the time-led index.
-	{"idx_usage_monitoring_event_projection_api_key_scope", "usage_monitoring_event_projection_v1", `create index if not exists idx_usage_monitoring_event_projection_api_key_scope
+	// 10.2s for the timeline on the time-led index. v2 follows scope_v3.
+	{"idx_usage_monitoring_event_projection_api_key_scope_v2", "usage_monitoring_event_projection_v1", `create index if not exists idx_usage_monitoring_event_projection_api_key_scope_v2
 		on usage_monitoring_event_projection_v1(
 			api_key_hash, timestamp_ms, auth_index, auth_file_snapshot,
 			source_hash, source, account_snapshot, auth_label_snapshot,
@@ -247,7 +251,8 @@ var derivedIndexStatements = []struct {
 			service_tier, failed,
 			normalized_total_input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_tokens, cache_read_tokens,
-			cache_creation_tokens, total_tokens, latency_ms)`},
+			cache_creation_tokens, total_tokens, latency_ms,
+			auth_account_id_snapshot)`},
 	// ttft_ms only lives on usage_events, so the p95 readers cannot use the
 	// projection; carry the monitoring filter columns here instead so they scan
 	// the index alone rather than looking up every wide usage_events row.
@@ -264,23 +269,34 @@ var derivedIndexStatements = []struct {
 	// coverage probe look up every wide row of the window, all providers
 	// included. Measured on the 2.2M-row 30GB production usage.sqlite for a
 	// 30-day deepseek window: 24s (p95) and 53s (business outcome) uncovered.
-	{"idx_usage_events_latency_scope_v4", "usage_events", `create index if not exists idx_usage_events_latency_scope_v4
+	// v5 appends the account and credential filter columns (source,
+	// account_snapshot, auth_label_snapshot), executor_type for the request
+	// type filter, and request_id so the scoped business outcome fold collects
+	// its in-scope requests from this index alone. Measured on the 32GB
+	// production usage.sqlite for a 7-day single-account window: 8-10s (p95)
+	// on v4, which misses the account columns.
+	{"idx_usage_events_latency_scope_v5", "usage_events", `create index if not exists idx_usage_events_latency_scope_v5
 		on usage_events(
 			timestamp_ms, auth_index, api_key_hash, auth_file_snapshot,
 			source_hash, model, requested_model, latency_ms, ttft_ms,
 			failed, cached_tokens, cache_tokens, cache_read_tokens,
-			cache_creation_tokens, provider, auth_provider_snapshot)`},
+			cache_creation_tokens, provider, auth_provider_snapshot,
+			source, account_snapshot, auth_label_snapshot, executor_type,
+			request_id)`},
 	// The API-key-led twin of the latency scope index, for the same reason as
 	// the projection's api_key_scope: a key-scoped p95 read and business outcome
 	// probe otherwise walk every key's entries in the window. Readers pin it
 	// only when the filter selects API keys. Measured on the 30GB production
 	// usage.sqlite for 3 keys over 30 days: 3.5s (p95) on the time-led index.
-	{"idx_usage_events_api_key_latency_scope", "usage_events", `create index if not exists idx_usage_events_api_key_latency_scope
+	// v2 follows latency_scope_v5.
+	{"idx_usage_events_api_key_latency_scope_v2", "usage_events", `create index if not exists idx_usage_events_api_key_latency_scope_v2
 		on usage_events(
 			api_key_hash, timestamp_ms, auth_index, auth_file_snapshot,
 			source_hash, model, requested_model, latency_ms, ttft_ms,
 			failed, cached_tokens, cache_tokens, cache_read_tokens,
-			cache_creation_tokens, provider, auth_provider_snapshot)`},
+			cache_creation_tokens, provider, auth_provider_snapshot,
+			source, account_snapshot, auth_label_snapshot, executor_type,
+			request_id)`},
 	// The business outcome reads fold attempts into client requests by
 	// request_id (min/max of failed per group), so they window on
 	// timestamp_ms and carry request_id and failed in the index to stay off
@@ -293,6 +309,14 @@ var derivedIndexStatements = []struct {
 	// the temp B-tree over 886k request_ids.
 	{"idx_usage_events_request_outcome", "usage_events", `create index if not exists idx_usage_events_request_outcome
 		on usage_events(timestamp_ms, request_id, failed)`},
+	// A scoped business outcome fold seeks each in-scope request's attempts
+	// here instead of folding every request in the window. It leads with
+	// request_id, so it also serves the plain request_id lookups and replaces
+	// idx_usage_events_request_id. Measured on the 32GB production
+	// usage.sqlite for a 30-day codex window: 2.4s folding all 1.5M requests
+	// vs 0.1s CPU seeking the 121k in-scope ones.
+	{"idx_usage_events_request_attempts", "usage_events", `create index if not exists idx_usage_events_request_attempts
+		on usage_events(request_id, timestamp_ms, failed)`},
 	{"idx_usage_monitoring_header_latest_timestamp", usageMonitoringHeaderLatestTable, `create index if not exists idx_usage_monitoring_header_latest_timestamp on usage_monitoring_header_latest_v1(timestamp_ms desc, event_id desc)`},
 	{"idx_usage_event_identity_ledger_raw_event_id", usageEventIdentityLedger, `create index if not exists idx_usage_event_identity_ledger_raw_event_id on usage_event_identity_ledger(raw_event_id)`},
 	{"idx_usage_event_identity_ledger_bucket", usageEventIdentityLedger, `create index if not exists idx_usage_event_identity_ledger_bucket on usage_event_identity_ledger(bucket_ms)`},

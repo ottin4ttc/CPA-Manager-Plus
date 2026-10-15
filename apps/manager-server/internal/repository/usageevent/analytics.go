@@ -1597,15 +1597,21 @@ const businessOutcomeIndexName = "idx_usage_events_request_outcome"
 // latencyScopeIndexName is the covering index for the latency window scans and
 // the scoped business outcome coverage probe. Like businessOutcomeIndexName it
 // is prepared off the startup path, so readers that pin it must check it
-// exists first, and fall back to legacyLatencyScopeIndexName until the offline
+// exists first, and fall back to the previous versions until the offline
 // cleanup builds it.
 const (
-	latencyScopeIndexName       = "idx_usage_events_latency_scope_v4"
-	legacyLatencyScopeIndexName = "idx_usage_events_latency_scope_v3"
+	latencyScopeIndexName         = "idx_usage_events_latency_scope_v5"
+	previousLatencyScopeIndexName = "idx_usage_events_latency_scope_v4"
+	legacyLatencyScopeIndexName   = "idx_usage_events_latency_scope_v3"
 	// apiKeyLatencyScopeIndexName carries the latency scope columns behind
 	// api_key_hash, so key-scoped reads seek each key's window instead of
 	// walking every key's entries.
-	apiKeyLatencyScopeIndexName = "idx_usage_events_api_key_latency_scope"
+	apiKeyLatencyScopeIndexName         = "idx_usage_events_api_key_latency_scope_v2"
+	previousAPIKeyLatencyScopeIndexName = "idx_usage_events_api_key_latency_scope"
+	// businessOutcomeRequestIndexName leads with request_id, so the scoped fold
+	// seeks the attempts of each in-scope request instead of folding the whole
+	// window.
+	businessOutcomeRequestIndexName = "idx_usage_events_request_attempts"
 )
 
 // businessOutcomeTimelineSQL folds attempts into requests by request_id and
@@ -1668,6 +1674,51 @@ from (
 	from usage_events e indexed by ` + businessOutcomeIndexName + `
 	where e.timestamp_ms >= ? and e.timestamp_ms < ?
 	group by coalesce(nullif(e.request_id, ''), 'event:' || e.id)
+)
+where n_in > 0
+group by bucket_ms
+order by bucket_ms`
+
+// businessOutcomeSeekTimelineSQL answers the same question as
+// businessOutcomeScopedTimelineSQL, with the same placeholders and result
+// columns, without folding every request in the window: requests with no
+// in-scope attempt are dropped by `n_in > 0` there anyway. It collects the
+// in-scope attempts once from the latency scope index (%[3]s must carry
+// request_id), then seeks each of their requests' in-window attempts on
+// businessOutcomeRequestIndexName for the true n_all. An attempt without a
+// request_id is its own single-attempt request, as in the window fold. Measured
+// on the 32GB production usage.sqlite for a 30-day codex window: the window
+// fold groups 1.5M requests (2.4s) where the scope touches 121k.
+const businessOutcomeSeekTimelineSQL = `with scoped as materialized (
+	select id, request_id, timestamp_ms, failed
+	from usage_events indexed by %[3]s %[2]s
+),
+scoped_requests as materialized (
+	select distinct request_id from scoped where request_id != ''
+)
+select
+	first_ts / 3600000 * 3600000 as bucket_ms,
+	coalesce(sum(case when %[1]s then 1 else 0 end), 0),
+	coalesce(sum(case when %[1]s then all_failed else 0 end), 0),
+	coalesce(sum(case when %[1]s then any_failed - all_failed else 0 end), 0),
+	coalesce(sum(case when not (%[1]s) then 1 else 0 end), 0),
+	coalesce(sum(case when n_all > 1 then 1 else 0 end), 0)
+from (
+	select
+		min(e.timestamp_ms) as first_ts,
+		min(e.failed) as all_failed,
+		max(e.failed) as any_failed,
+		count(*) as n_all,
+		sum(e.id in (select id from scoped)) as n_in
+	from scoped_requests k
+	join usage_events e indexed by ` + businessOutcomeRequestIndexName + `
+		on e.request_id = k.request_id
+	where e.timestamp_ms >= ? and e.timestamp_ms < ?
+	group by k.request_id
+	union all
+	select timestamp_ms, failed, failed, 1, 1
+	from scoped
+	where coalesce(request_id, '') = ''
 )
 where n_in > 0
 group by bucket_ms
@@ -1752,25 +1803,40 @@ const businessOutcomeInScopeExpr = "n_in = n_all"
 const businessOutcomeBucketInScopeExpr = "n_in > 0"
 
 // latencyScopeIndex returns the latency scope index to pin for filter: the
-// API-key-led one when the filter selects keys, otherwise the newest time-led
-// one present, or "" when none has been built yet.
+// newest API-key-led one when the filter selects keys, otherwise the newest
+// time-led one present, or "" when none has been built yet.
 func (r *repository) latencyScopeIndex(ctx context.Context, filter AnalyticsFilter) (string, error) {
-	candidates := []string{latencyScopeIndexName, legacyLatencyScopeIndexName}
+	candidates := []string{latencyScopeIndexName, previousLatencyScopeIndexName, legacyLatencyScopeIndexName}
 	if len(normalizeFilterValues(filter.APIKeyHashes)) > 0 {
-		candidates = append([]string{apiKeyLatencyScopeIndexName}, candidates...)
+		candidates = append([]string{apiKeyLatencyScopeIndexName, previousAPIKeyLatencyScopeIndexName}, candidates...)
 	}
 	for _, name := range candidates {
-		var count int
-		if err := r.db.QueryRowContext(ctx,
-			`select count(*) from sqlite_master where type = 'index' and name = ?`,
-			name).Scan(&count); err != nil {
+		exists, err := r.indexExists(ctx, name)
+		if err != nil {
 			return "", err
 		}
-		if count > 0 {
+		if exists {
 			return name, nil
 		}
 	}
 	return "", nil
+}
+
+func (r *repository) indexExists(ctx context.Context, name string) (bool, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx,
+		`select count(*) from sqlite_master where type = 'index' and name = ?`,
+		name).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// latencyScopeIndexCarriesRequestID reports whether the latency scope index
+// lists request_id, which businessOutcomeSeekTimelineSQL needs to collect the
+// in-scope requests without a wide-row lookup per attempt.
+func latencyScopeIndexCarriesRequestID(index string) bool {
+	return index == latencyScopeIndexName || index == apiKeyLatencyScopeIndexName
 }
 
 // BusinessOutcomeTimelineWithFilter folds upstream attempts into client
@@ -1838,7 +1904,17 @@ func (r *repository) BusinessOutcomeTimelineWithFilter(ctx context.Context, filt
 	if filter.BucketScope {
 		inScope = businessOutcomeBucketInScopeExpr
 	}
-	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(businessOutcomeScopedTimelineSQL, inScope, where, probeIndex), args...)
+	scopedSQL := businessOutcomeScopedTimelineSQL
+	if latencyScopeIndexCarriesRequestID(probeIndex) {
+		seekable, err := r.indexExists(ctx, businessOutcomeRequestIndexName)
+		if err != nil {
+			return nil, false, err
+		}
+		if seekable {
+			scopedSQL = businessOutcomeSeekTimelineSQL
+		}
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(scopedSQL, inScope, where, probeIndex), args...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -3260,7 +3336,7 @@ func analyticsWhere(filter AnalyticsFilter) (string, []any) {
 	addInCondition(credentialIDExpr, filter.CredentialIDs)
 	addInCondition("auth_file_snapshot", filter.AuthFiles)
 	addInCondition("auth_index", filter.AuthIndices)
-	// api_key_hash stays bare so idx_usage_events_api_key_latency_scope can seek
+	// api_key_hash stays bare so idx_usage_events_api_key_latency_scope_v2 can seek
 	// it; normalizeFilterValues drops empty values, so coalesce(..., '') could
 	// never match more rows here.
 	if apiKeyHashes := normalizeFilterValues(filter.APIKeyHashes); len(apiKeyHashes) > 0 {

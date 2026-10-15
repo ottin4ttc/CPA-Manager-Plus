@@ -85,7 +85,7 @@ func TestLatencyBreakdownFilteredReadsStayCovered(t *testing.T) {
 				t.Fatalf("%s: scan query plan: %v", name, err)
 			}
 			details = append(details, detail)
-			covered = covered || strings.Contains(detail, "COVERING INDEX idx_usage_events_latency_scope_v4")
+			covered = covered || strings.Contains(detail, "COVERING INDEX idx_usage_events_latency_scope_v5")
 			rowLookup = rowLookup ||
 				(strings.Contains(detail, " USING INDEX ") && !strings.Contains(detail, "COVERING")) ||
 				strings.Contains(detail, "SCAN usage_events")

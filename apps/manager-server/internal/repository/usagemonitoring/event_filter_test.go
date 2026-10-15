@@ -59,7 +59,7 @@ func TestProjectionTailReadsByEventIDRange(t *testing.T) {
 	}
 	// A rollup still catching up leaves most of the projection past its
 	// coverage, and there the time window is the tighter bound.
-	if got := plan(2_207_400, 0); !strings.Contains(got, "idx_usage_monitoring_event_projection_scope_v2") {
+	if got := plan(2_207_400, 0); !strings.Contains(got, "idx_usage_monitoring_event_projection_scope_v3") {
 		t.Fatalf("long projection tail left the scope index: %s", got)
 	}
 }
@@ -103,7 +103,7 @@ func TestAPIKeyScopedProjectionReadSeeksAPIKeyIndex(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("query plan rows: %v", err)
 	}
-	seek := "SEARCH p USING COVERING INDEX idx_usage_monitoring_event_projection_api_key_scope (api_key_hash=? AND timestamp_ms>? AND timestamp_ms<?)"
+	seek := "SEARCH p USING COVERING INDEX idx_usage_monitoring_event_projection_api_key_scope_v2 (api_key_hash=? AND timestamp_ms>? AND timestamp_ms<?)"
 	if got := strings.Join(details, "\n"); !strings.Contains(got, seek) {
 		t.Fatalf("key-scoped projection read does not seek the API key index: %s", got)
 	}

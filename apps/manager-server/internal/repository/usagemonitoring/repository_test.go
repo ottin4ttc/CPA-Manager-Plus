@@ -153,7 +153,7 @@ func TestUsageEventsLatencyIndexCoversModelFilteredRead(t *testing.T) {
 	order by timestamp_ms`
 	plan := strings.Join(explainMonitoringPlan(t, sqlDB, query, int64(1800000000000), "model-a"), "\n")
 
-	if !strings.Contains(plan, "COVERING INDEX idx_usage_events_latency_scope_v4") {
+	if !strings.Contains(plan, "COVERING INDEX idx_usage_events_latency_scope_v5") {
 		t.Fatalf("model-filtered latency read is not covered: %s", plan)
 	}
 }
@@ -183,7 +183,7 @@ func TestMonitoringProjectionScopeIndexCoversAnalyticsSelectList(t *testing.T) {
 	where p.event_id <= ? and p.timestamp_ms >= ? and p.timestamp_ms < ?`
 	plan := strings.Join(explainMonitoringPlan(t, sqlDB, query, int64(1<<62), int64(1800000000000), int64(1800000200000)), "\n")
 
-	if !strings.Contains(plan, "COVERING INDEX idx_usage_monitoring_event_projection_scope_v2") {
+	if !strings.Contains(plan, "COVERING INDEX idx_usage_monitoring_event_projection_scope_v3") {
 		t.Fatalf("analytics select list is not covered by the scope index: %s", plan)
 	}
 }
@@ -240,7 +240,7 @@ func TestRequestMonitoringProjectionTimestampIndexAvoidsTemporaryOrderBy(t *test
 	// The analytics scope index also leads with timestamp_ms, so it satisfies the
 	// range on its own and would keep the plan off a full temporary sort. Drop it
 	// too, otherwise this control cannot show what the timestamp index buys.
-	if _, err := sqlDB.Exec(`drop index idx_usage_monitoring_event_projection_scope_v2`); err != nil {
+	if _, err := sqlDB.Exec(`drop index idx_usage_monitoring_event_projection_scope_v3`); err != nil {
 		t.Fatalf("drop monitoring projection scope index: %v", err)
 	}
 	withoutIndex := explainMonitoringPlan(t, sqlDB, query, int64(1800000000000), int64(1800000200000), 100)
