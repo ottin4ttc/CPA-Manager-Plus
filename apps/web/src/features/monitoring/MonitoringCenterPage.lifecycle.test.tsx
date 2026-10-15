@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthFileItem } from '@/types';
@@ -22,10 +22,12 @@ const mocks = vi.hoisted(() => ({
   nextAuthFiles: null as AuthFileItem[] | null,
   lastAccountOverviewProps: null as null | {
     accountQuotaStatesByRowId: Record<string, AccountQuotaState>;
+    emptyState: ReactNode;
     onLoadAccountQuota: (rowId: string, force: boolean) => void | Promise<void>;
   },
   lastHeaderRefresh: null as null | (() => void | Promise<void>),
   lastFiltersPanelProps: null as null | {
+    overallLoading: boolean;
     showBucketFilter: boolean;
     selectedBucket: string;
     selectedAccount: string;
@@ -37,6 +39,8 @@ const mocks = vi.hoisted(() => ({
     scopeFilters?: { authFile?: string; authIndex?: string; projectId?: string };
   },
   locationSearch: '',
+  monitoringLoading: false,
+  scopeTransitioning: false,
   loadHeaderSnapshots: vi.fn(async () => undefined),
   refreshMeta: vi.fn(),
   requestAccountQuota: vi.fn(),
@@ -144,7 +148,7 @@ vi.mock('@/features/monitoring/hooks/useMonitoringData', async () => {
         models: [],
       };
       return {
-        loading: false,
+        loading: mocks.monitoringLoading,
         error: '',
         authFiles: mocks.authFiles,
         channels: [],
@@ -209,7 +213,7 @@ vi.mock('@/features/monitoring/hooks/useMonitoringData', async () => {
         eventsTotalCount: 0,
         eventsLoadedCount: 0,
         lastRefreshedAt: new Date(1),
-        isTransitioningScope: false,
+        isTransitioningScope: mocks.scopeTransitioning,
         hasPresentationSnapshot: true,
         refreshMeta,
         loadMoreEvents: vi.fn(),
@@ -268,10 +272,7 @@ vi.mock('@/features/monitoring/model/monitoringCenterPageModel', async (importOr
 });
 
 vi.mock('@/features/monitoring/components/AccountOverviewPanel', () => ({
-  AccountOverviewPanel: (props: {
-    accountQuotaStatesByRowId: Record<string, AccountQuotaState>;
-    onLoadAccountQuota: (rowId: string, force: boolean) => void | Promise<void>;
-  }) => {
+  AccountOverviewPanel: (props: NonNullable<typeof mocks.lastAccountOverviewProps>) => {
     mocks.lastAccountOverviewProps = props;
     return null;
   },
@@ -356,6 +357,8 @@ describe('MonitoringCenterPage credential quota revision lifecycle', () => {
     mocks.nextAuthFiles = null;
     mocks.lastAccountOverviewProps = null;
     mocks.lastHeaderRefresh = null;
+    mocks.monitoringLoading = false;
+    mocks.scopeTransitioning = false;
     mocks.loadHeaderSnapshots.mockClear();
     // Default: refreshMeta resolves with a successful auth-files payload so the
     // production success-coverage path is exercised, not the failure path.
@@ -387,6 +390,41 @@ describe('MonitoringCenterPage credential quota revision lifecycle', () => {
       rendererMounted = true;
       await flushPromises();
     });
+  });
+
+  const rerenderPage = async () => {
+    await act(async () => {
+      renderer.update(<MonitoringCenterPage />);
+      await flushPromises();
+    });
+  };
+
+  const emptyStateRole = () => {
+    const emptyState = mocks.lastAccountOverviewProps?.emptyState;
+    return isValidElement<{ role?: string }>(emptyState) ? emptyState.props.role : undefined;
+  };
+
+  it('dims the previous snapshot and spins refresh while a new scope loads', async () => {
+    const page = () => renderer.root.findAllByType('div')[0];
+    expect(String(page().props.className)).not.toContain('pageRefreshing');
+    expect(mocks.lastFiltersPanelProps?.overallLoading).toBe(false);
+
+    mocks.monitoringLoading = true;
+    mocks.scopeTransitioning = true;
+    await rerenderPage();
+
+    expect(String(page().props.className)).toContain('pageRefreshing');
+    expect(page().props['aria-busy']).toBe(true);
+    expect(mocks.lastFiltersPanelProps?.overallLoading).toBe(true);
+  });
+
+  it('renders a loading placeholder instead of the no-data state while loading', async () => {
+    expect(emptyStateRole()).toBeUndefined();
+
+    mocks.monitoringLoading = true;
+    await rerenderPage();
+
+    expect(emptyStateRole()).toBe('status');
   });
 
   // Test 1: successful coverage triggers quota reload.

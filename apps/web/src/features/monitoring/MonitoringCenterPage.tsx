@@ -62,6 +62,7 @@ import { UsageImportProgressModal } from '@/features/monitoring/components/Usage
 import { usePageTransitionLayer } from '@/components/common/PageTransitionLayer';
 import { useDatabaseMaintenance } from '@/components/common/useDatabaseMaintenance';
 import { IconInbox } from '@/components/ui/icons';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import {
   MonitoringStatusHeader,
   MonitoringStatusSummary,
@@ -754,6 +755,10 @@ export function MonitoringCenterPage() {
     monitoringLoading && (!monitoringScopeTransitioning || !hasMonitoringPresentationSnapshot);
   const overallLoading =
     usageLoading || monitoringBlockingLoading || requestMonitoringAvailability.checking;
+  // Scope changes keep the previous snapshot on screen while the new scope loads.
+  const monitoringRefreshing =
+    monitoringLoading && monitoringScopeTransitioning && hasMonitoringPresentationSnapshot;
+  const refreshPending = overallLoading || monitoringRefreshing;
   const combinedError = monitoringUnavailable
     ? monitoringError
     : [usageError, monitoringError].filter(Boolean).join('；');
@@ -1273,22 +1278,28 @@ export function MonitoringCenterPage() {
     setDrilldownApiKeyGroup('all');
   }, []);
 
-  const renderMonitoringEmptyState = () => (
-    <div className={styles.emptyState}>
-      <IconInbox size={48} className={styles.emptyStateIcon} aria-hidden="true" />
-      <strong className={styles.emptyStateTitle}>
-        {hasActiveDataFilter ? t('monitoring.no_filtered_data') : t('monitoring.no_data')}
-      </strong>
-      {!hasActiveDataFilter ? (
-        <details className={styles.emptyStateDetails}>
-          <summary className={styles.emptyStateSummary}>
-            {t('monitoring.empty_diagnostics_link')}
-          </summary>
-          <span className={styles.emptyStateBody}>{t('monitoring.empty_diagnostics_body')}</span>
-        </details>
-      ) : null}
-    </div>
-  );
+  const renderMonitoringEmptyState = () =>
+    refreshPending ? (
+      <div className={styles.emptyState} role="status">
+        <LoadingSpinner size={28} />
+        <strong className={styles.emptyStateTitle}>{t('common.loading')}</strong>
+      </div>
+    ) : (
+      <div className={styles.emptyState}>
+        <IconInbox size={48} className={styles.emptyStateIcon} aria-hidden="true" />
+        <strong className={styles.emptyStateTitle}>
+          {hasActiveDataFilter ? t('monitoring.no_filtered_data') : t('monitoring.no_data')}
+        </strong>
+        {!hasActiveDataFilter ? (
+          <details className={styles.emptyStateDetails}>
+            <summary className={styles.emptyStateSummary}>
+              {t('monitoring.empty_diagnostics_link')}
+            </summary>
+            <span className={styles.emptyStateBody}>{t('monitoring.empty_diagnostics_body')}</span>
+          </details>
+        ) : null}
+      </div>
+    );
 
   const openCustomRangeModal = useCallback(() => {
     setCustomDraftStartInput(customStartInput || getTodayStartInputValue());
@@ -1646,7 +1657,7 @@ export function MonitoringCenterPage() {
           searchInput={searchInput}
           accountSort={accountSort}
           accountSortOptions={accountSortOptions}
-          overallLoading={overallLoading}
+          overallLoading={refreshPending}
           t={t}
           onSearchChange={setSearchInput}
           onRefreshAll={refreshAll}
@@ -1681,9 +1692,9 @@ export function MonitoringCenterPage() {
     apiKeyRows.length,
     failedOnlyActive,
     handleAccountSortKeyChange,
-    overallLoading,
     realtimeLogRows.length,
     refreshAll,
+    refreshPending,
     scopedFailureCount,
     searchInput,
     t,
@@ -1978,7 +1989,10 @@ export function MonitoringCenterPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div
+      className={`${styles.page} ${monitoringRefreshing ? styles.pageRefreshing : ''}`}
+      aria-busy={refreshPending}
+    >
       <MonitoringStatusHeader
         showLoadingOverlay={
           overallLoading &&
@@ -2042,7 +2056,7 @@ export function MonitoringCenterPage() {
         statusOptions={statusOptions}
         combinedError={combinedError}
         usageStatisticsEnabled={Boolean(config?.usageStatisticsEnabled)}
-        overallLoading={overallLoading}
+        overallLoading={refreshPending}
         showBucketFilter={showBucketFilter}
         showApiKeyGroupFilter={showApiKeyGroupFilter}
         t={t}
@@ -2095,7 +2109,7 @@ export function MonitoringCenterPage() {
                 accountPageSizeOptions={accountPageSizeOptions}
                 accountOverviewScopeText={accountOverviewScopeText}
                 hasPrices={hasPrices}
-                overallLoading={overallLoading}
+                overallLoading={refreshPending}
                 locale={i18n.language}
                 emptyState={renderMonitoringEmptyState()}
                 t={t}
@@ -2148,7 +2162,7 @@ export function MonitoringCenterPage() {
               eventsRetentionLimited={eventsRetentionLimited}
               eventsTotalCount={eventsTotalCount}
               eventsLoadedCount={eventsLoadedCount}
-              overallLoading={overallLoading}
+              overallLoading={refreshPending}
               hasPrices={hasPrices}
               accountDisplayMode={accountDisplayMode}
               locale={i18n.language}

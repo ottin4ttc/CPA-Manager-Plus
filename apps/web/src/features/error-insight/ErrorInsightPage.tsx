@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { ECElementEvent, EChartsCoreOption } from 'echarts/core';
 import { EChartsView } from '@/components/charts/EChartsView';
 import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '@/components/ui/Select';
 import {
   IconBan,
@@ -428,9 +429,15 @@ export function ErrorInsightPage() {
 
   const selectedClassLabel = filters.selectedClass ? classLabel(t, filters.selectedClass) : '';
   const clearFiltersLabel = t('error_insight.clear_filters', 'Clear filters');
+  const loading = status === 'loading';
+  // Refetches keep the previous result on screen, dimmed, until the new one lands.
+  const refreshing = loading && view !== null;
 
   return (
-    <div className={styles.page}>
+    <div
+      className={`${styles.page} ${refreshing ? styles.pageRefreshing : ''}`}
+      aria-busy={loading}
+    >
       <section className={styles.controlsPanel}>
         <div className={styles.controlBar}>
           <div className={styles.segmentedControl}>
@@ -451,13 +458,8 @@ export function ErrorInsightPage() {
             <button type="button" className={styles.filterActionButton} onClick={clearFilters}>
               {clearFiltersLabel}
             </button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={refresh}
-              disabled={status === 'loading'}
-            >
-              <IconRefreshCw size={15} />
+            <Button variant="secondary" size="sm" onClick={refresh} loading={loading}>
+              {loading ? null : <IconRefreshCw size={15} />}
               {t('error_insight.refresh')}
             </Button>
           </div>
@@ -576,11 +578,14 @@ export function ErrorInsightPage() {
         </section>
       ) : null}
 
-      {status === 'loading' ? (
-        <p className={styles.stateLine}>{t('error_insight.loading')}</p>
+      {loading && !view ? (
+        <div className={styles.stateLine} role="status">
+          <LoadingSpinner size={28} />
+          <span>{t('error_insight.loading')}</span>
+        </div>
       ) : null}
 
-      {status === 'ready' && view ? (
+      {(status === 'ready' || loading) && view ? (
         <>
           <section className={styles.kpiGrid}>
             <div className={styles.kpiCard}>

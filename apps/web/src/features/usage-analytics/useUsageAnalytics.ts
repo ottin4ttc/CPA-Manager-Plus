@@ -375,7 +375,18 @@ export function useUsageAnalytics() {
     throttleMs: 0,
   });
 
-  const analyticsData = analytics.dataStale ? null : analytics.data;
+  // Each tab requests different sections, so stale data is only reusable while
+  // refetching the tab it was loaded for (filters, range, refresh, drilldown).
+  const [loadedDataTab, setLoadedDataTab] = useState<UsageAnalyticsTab>(activeTabState);
+  if (analytics.data && !analytics.dataStale && loadedDataTab !== activeTabState) {
+    setLoadedDataTab(activeTabState);
+  }
+  // dataStale flips on the scope-change render, before the fetch effect sets
+  // loading, so count it as loading unless the last request failed.
+  const analyticsLoading =
+    analytics.loading || waitingForApiKeyGroups || (analytics.dataStale && !analytics.error);
+  const keepStaleAnalyticsData = analyticsLoading && loadedDataTab === activeTabState;
+  const analyticsData = analytics.dataStale && !keepStaleAnalyticsData ? null : analytics.data;
   const filterSelectorsData = filterSelectorsAnalytics.dataStale
     ? null
     : filterSelectorsAnalytics.data;
@@ -587,6 +598,13 @@ export function useUsageAnalytics() {
   const selectedApiKeyTimelineData = selectedApiKeyTimelineAnalytics.dataStale
     ? null
     : selectedApiKeyTimelineAnalytics.data;
+  const selectedApiKeyTrendLoading = Boolean(
+    activeTabState === 'apiKeys' &&
+    selectedApiKeyFilterHash &&
+    (selectedApiKeyTimelineAnalytics.loading ||
+      selectedApiKeyTimelineAnalytics.dataStale ||
+      (!selectedApiKeyTimelineAnalytics.data && !selectedApiKeyTimelineAnalytics.error))
+  );
   const selectedApiKeyTimeline = useMemo(
     () => buildUsageTimeline(selectedApiKeyTimelineData?.timeline ?? [], resolvedGranularity),
     [resolvedGranularity, selectedApiKeyTimelineData]
@@ -801,7 +819,8 @@ export function useUsageAnalytics() {
     setActiveTab,
     bounds,
     resolvedGranularity,
-    loading: analytics.loading || waitingForApiKeyGroups,
+    loading: analyticsLoading,
+    hasData: analyticsData !== null,
     error: analytics.error,
     enabled: analytics.enabled,
     apiKeyDisplayMap,
@@ -845,6 +864,7 @@ export function useUsageAnalytics() {
     modelTrendSeries,
     apiKeyTrendSeries,
     selectedApiKeyTrendSeries,
+    selectedApiKeyTrendLoading,
     credentialTrendSeries,
     credentialTrendLoading,
     credentialTrendError,

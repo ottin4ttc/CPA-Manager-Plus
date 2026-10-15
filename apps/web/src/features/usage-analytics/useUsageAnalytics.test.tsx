@@ -56,6 +56,9 @@ describe('useUsageAnalytics request orchestration', () => {
   let selectorPending = false;
   let credentialTimelineError = '';
   let credentialTimelineLoading = false;
+  let mainLoading = false;
+  let mainStale = false;
+  let mainError = '';
   const mainRefresh = vi.fn();
   const selectorRefresh = vi.fn();
   const auxiliaryRefresh = vi.fn();
@@ -132,8 +135,14 @@ describe('useUsageAnalytics request orchestration', () => {
         : emptyAnalyticsResponse;
     return {
       enabled: Boolean(params.fromMs && params.toMs),
-      loading: credentialTimeline ? credentialTimelineLoading : false,
-      error: selectors ? selectorError : credentialTimeline ? credentialTimelineError : '',
+      loading: credentialTimeline ? credentialTimelineLoading : main ? mainLoading : false,
+      error: selectors
+        ? selectorError
+        : credentialTimeline
+          ? credentialTimelineError
+          : main
+            ? mainError
+            : '',
       data: selectors
         ? selectorError || selectorPending
           ? null
@@ -186,7 +195,7 @@ describe('useUsageAnalytics request orchestration', () => {
                   ],
                 }
               : null,
-      dataStale: false,
+      dataStale: main ? mainStale : false,
       lastRefreshedAt: null,
       serviceBase: 'http://manager.local',
       unavailableReason: '',
@@ -213,6 +222,9 @@ describe('useUsageAnalytics request orchestration', () => {
     apiKeyGroupsState.groups = [];
     credentialTimelineError = '';
     credentialTimelineLoading = false;
+    mainLoading = false;
+    mainStale = false;
+    mainError = '';
     latestResult = null;
     mainRefresh.mockReset();
     selectorRefresh.mockReset();
@@ -396,6 +408,50 @@ describe('useUsageAnalytics request orchestration', () => {
     expect(latestResult?.credentialTrendLoading).toBe(false);
     expect(latestResult?.credentialTrendError).toBe('timeline failed');
     expect(latestResult?.credentialRows).toHaveLength(1);
+  });
+
+  it('keeps the current tab data while the same tab refetches a new scope', async () => {
+    await renderHook();
+    expect(latestResult?.loading).toBe(false);
+    expect(latestResult?.hasData).toBe(true);
+
+    mainStale = true;
+    await act(async () => {
+      latestResult?.refresh();
+    });
+
+    expect(latestResult?.loading).toBe(true);
+    expect(latestResult?.hasData).toBe(true);
+    expect(latestResult?.timeline).toHaveLength(2);
+    expect(latestResult?.apiKeyRows.map((row) => row.id)).toEqual(['key-a']);
+  });
+
+  it('drops data loaded for another tab while the new tab loads', async () => {
+    await renderHook();
+    mainStale = true;
+    mainLoading = true;
+
+    await act(async () => {
+      latestResult?.setActiveTab('heatmap');
+    });
+
+    expect(latestResult?.loading).toBe(true);
+    expect(latestResult?.hasData).toBe(false);
+    expect(latestResult?.timeline).toEqual([]);
+  });
+
+  it('drops stale data once the new scope fails', async () => {
+    await renderHook();
+    mainStale = true;
+    mainError = 'boom';
+
+    await act(async () => {
+      latestResult?.refresh();
+    });
+
+    expect(latestResult?.loading).toBe(false);
+    expect(latestResult?.hasData).toBe(false);
+    expect(latestResult?.error).toBe('boom');
   });
 
   it('drops the bucket filter once the provider filter leaves codex', async () => {

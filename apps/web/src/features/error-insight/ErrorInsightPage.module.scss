@@ -16,6 +16,15 @@
   min-width: 0;
   padding: 16px 24px;
   color: var(--ei-text);
+
+  > :not(.controlsPanel, .alertPanel) {
+    transition: opacity 0.2s ease;
+  }
+}
+
+.pageRefreshing > :not(.controlsPanel, .alertPanel) {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 .controlsPanel,
@@ -457,6 +466,11 @@
 }
 
 .stateLine {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
   padding: 4px 4px;
   color: var(--ei-muted);
   font-size: 13px;

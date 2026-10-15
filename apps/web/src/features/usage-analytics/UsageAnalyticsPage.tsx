@@ -13,6 +13,7 @@ import type { BarSeriesOption, HeatmapSeriesOption, LineSeriesOption } from 'ech
 import type { ComposeOption, ECElementEvent } from 'echarts/core';
 import { EChartsView } from '@/components/charts/EChartsView';
 import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '@/components/ui/Select';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import {
@@ -2657,6 +2658,9 @@ function UsageAnalyticsPageInner() {
     { value: 'miss', label: t('usage_analytics.cache_status_miss') },
   ];
   const noData = !usage.loading && !usage.error && !hasUsageData(usage.summary, usage.timeline);
+  const initialLoading = usage.loading && !usage.hasData;
+  const refreshing = usage.loading && usage.hasData;
+  const visibleTab = initialLoading ? null : usage.activeTab;
   const rankRowLimit = 8;
   const credentialRankRowLimit = 10;
   const visibleModelRows = showAllModels ? usage.modelRows : usage.modelRows.slice(0, rankRowLimit);
@@ -2822,7 +2826,10 @@ function UsageAnalyticsPageInner() {
   };
 
   return (
-    <div className={styles.page}>
+    <div
+      className={`${styles.page} ${refreshing ? styles.pageRefreshing : ''}`}
+      aria-busy={usage.loading}
+    >
       <section className={styles.controlsPanel}>
         <div className={styles.controlsTabsRow}>
           <SegmentedTabs
@@ -2899,9 +2906,9 @@ function UsageAnalyticsPageInner() {
                 variant="secondary"
                 size="sm"
                 onClick={usage.refresh}
-                disabled={usage.loading}
+                loading={usage.loading}
               >
-                <IconRefreshCw size={15} />
+                {usage.loading ? null : <IconRefreshCw size={15} />}
                 {t('common.refresh')}
               </Button>
             </div>
@@ -3061,7 +3068,14 @@ function UsageAnalyticsPageInner() {
         />
       ) : null}
 
-      {usage.activeTab === 'overview' ? (
+      {initialLoading ? (
+        <div className={styles.emptyState} role="status">
+          <LoadingSpinner size={28} />
+          <strong>{t('common.loading')}</strong>
+        </div>
+      ) : null}
+
+      {visibleTab === 'overview' ? (
         <>
           <UsageSummarySection cards={overviewSummaryCards} />
 
@@ -3115,7 +3129,7 @@ function UsageAnalyticsPageInner() {
         </>
       ) : null}
 
-      {usage.activeTab === 'trends' ? (
+      {visibleTab === 'trends' ? (
         <>
           <UsageSummarySection cards={trendSummaryCards} />
 
@@ -3258,7 +3272,7 @@ function UsageAnalyticsPageInner() {
         </>
       ) : null}
 
-      {usage.activeTab === 'models' ? (
+      {visibleTab === 'models' ? (
         <>
           <UsageSummarySection cards={modelSummaryCards} />
           <section className={styles.tablePanel}>
@@ -3350,7 +3364,7 @@ function UsageAnalyticsPageInner() {
         </>
       ) : null}
 
-      {usage.activeTab === 'apiKeys' ? (
+      {visibleTab === 'apiKeys' ? (
         <>
           <UsageSummarySection cards={apiKeySummaryCards} />
           {usage.apiKeyGroups.available ? (
@@ -3421,6 +3435,7 @@ function UsageAnalyticsPageInner() {
                 series={usage.selectedApiKeyTrendSeries}
                 metric={usage.trendMetric}
                 highlightId={usage.selectedApiKey?.apiKeyHash || usage.selectedApiKey?.id}
+                loading={usage.selectedApiKeyTrendLoading}
               />
             </div>
             {usage.selectedApiKey ? (
@@ -3471,7 +3486,7 @@ function UsageAnalyticsPageInner() {
         </>
       ) : null}
 
-      {usage.activeTab === 'credentials' ? (
+      {visibleTab === 'credentials' ? (
         <>
           <UsageSummarySection cards={credentialSummaryCards} />
           <section className={styles.credentialAnalysisGrid}>
@@ -3586,7 +3601,7 @@ function UsageAnalyticsPageInner() {
         </>
       ) : null}
 
-      {usage.activeTab === 'heatmap' ? (
+      {visibleTab === 'heatmap' ? (
         <>
           <UsageSummarySection cards={heatmapSummaryCards} />
           <section className={styles.chartPanel}>

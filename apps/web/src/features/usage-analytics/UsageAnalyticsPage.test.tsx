@@ -192,6 +192,7 @@ const createUsageState = (overrides: Record<string, unknown> = {}) => {
     bounds: { fromMs: point.bucketMs, toMs: point.bucketEndMs },
     resolvedGranularity: 'hour',
     loading: false,
+    hasData: true,
     error: '',
     enabled: true,
     unavailableReason: '',
@@ -689,6 +690,33 @@ describe('UsageAnalyticsPage', () => {
     renderer = renderPage();
     expect(getText(renderer.root)).toContain('usage_analytics.error_title');
     expect(getText(renderer.root)).toContain('analytics failed');
+  });
+
+  it('shows a loading panel instead of empty charts until the first result arrives', () => {
+    mocks.usageState = createUsageState({
+      loading: true,
+      hasData: false,
+      timeline: [],
+      selectedBucket: null,
+    });
+    const renderer = renderPage();
+    const text = getText(renderer.root);
+
+    expect(text).toContain('common.loading');
+    expect(text).not.toContain('usage_analytics.empty_title');
+    expect(text).not.toContain('usage_analytics.overview_trend_title');
+  });
+
+  it('keeps current results mounted while a refetch is in flight', () => {
+    mocks.usageState = createUsageState({ loading: true, hasData: true });
+    const renderer = renderPage();
+    const refreshButton = renderer.root
+      .findAllByType(Button)
+      .find((node) => getText(node).includes('common.refresh'));
+
+    expect(renderer.root.findByProps({ 'aria-busy': true }).type).toBe('div');
+    expect(getText(renderer.root)).toContain('usage_analytics.overview_trend_title');
+    expect(refreshButton?.props.loading).toBe(true);
   });
 
   it('navigates to request monitoring details for a selected anomaly bucket', () => {

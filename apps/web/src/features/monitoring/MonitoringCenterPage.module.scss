@@ -28,6 +28,17 @@
   display: grid;
   gap: 20px;
   min-width: 0;
+
+  > .summarySection,
+  > .dataPanel {
+    transition: opacity 0.2s ease;
+  }
+}
+
+.pageRefreshing > .summarySection,
+.pageRefreshing > .dataPanel {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 .databaseMaintenanceHint {
